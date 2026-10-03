@@ -1,0 +1,113 @@
+{
+ "format": "ukur-tangga",
+ "versi": 1,
+ "aplikasi": "Ukur Tangga",
+ "diekspor": "2026-10-04T09:30:00.000Z",
+ "zona_waktu": "Asia/Jakarta",
+ "satuan": {
+  "panjang": "cm",
+  "cahaya": "lux",
+  "sudut": "derajat"
+ },
+ "keterangan": "nomor anak tangga dihitung dari bawah (anak tangga pertama yang dinaiki = 1); tinggi_riser_cm = jarak tegak dari permukaan tread di bawahnya ke tread anak tangga ini; panjang_tread_cm = kedalaman injakan dari muka riser ke tepi depan anak tangga berikutnya; bordes = bidang datar antar-lengan tangga",
+ "lokasi": [
+  {
+   "id": "lok_contoh01",
+   "nama": "Gedung F",
+   "alamat": "Kampus contoh",
+   "catatan": "",
+   "dibuat": "2026-10-04T09:00:00.000Z",
+   "diubah": "2026-10-04T09:00:00.000Z",
+   "tangga": [
+    {
+     "id": "tng_contoh01",
+     "nama": "Tangga utama",
+     "id_studio": "T01",
+     "lantai_dari": "1",
+     "lantai_ke": "2",
+     "arah": "naik",
+     "lebar_cm": 120,
+     "pegangan": "kanan",
+     "permukaan": "keramik",
+     "lux": 180,
+     "tanggal_ukur": "2026-10-04",
+     "pengukur": "nama pengukur",
+     "catatan": "contoh data, bukan hasil ukur sungguhan",
+     "bagian": [
+      {
+       "jenis": "anak_tangga",
+       "nomor": 1,
+       "tinggi_riser_cm": 17.5,
+       "panjang_tread_cm": 30,
+       "lebar_cm": null,
+       "catatan": ""
+      },
+      {
+       "jenis": "anak_tangga",
+       "nomor": 2,
+       "tinggi_riser_cm": 17,
+       "panjang_tread_cm": 30.5,
+       "lebar_cm": null,
+       "catatan": ""
+      },
+      {
+       "jenis": "anak_tangga",
+       "nomor": 3,
+       "tinggi_riser_cm": 18,
+       "panjang_tread_cm": 29.5,
+       "lebar_cm": null,
+       "catatan": ""
+      },
+      {
+       "jenis": "anak_tangga",
+       "nomor": 4,
+       "tinggi_riser_cm": 16.8,
+       "panjang_tread_cm": null,
+       "lebar_cm": null,
+       "catatan": ""
+      },
+      {
+       "jenis": "bordes",
+       "panjang_cm": 120,
+       "lebar_cm": null,
+       "catatan": ""
+      }
+     ],
+     "ringkasan": {
+      "n_anak_tangga": 4,
+      "n_bordes": 1,
+      "riser_cm": {
+       "n": 4,
+       "rerata": 17.3,
+       "sd": 0.5,
+       "median": 17.3,
+       "min": 16.8,
+       "maks": 18
+      },
+      "tread_cm": {
+       "n": 3,
+       "rerata": 30,
+       "sd": 0.5,
+       "median": 30,
+       "min": 29.5,
+       "maks": 30.5
+      },
+      "dua_riser_tambah_tread_cm": {
+       "n": 3,
+       "rerata": 65,
+       "sd": 0.5,
+       "median": 65,
+       "min": 64.5,
+       "maks": 65.5
+      },
+      "kemiringan_derajat": 30,
+      "tinggi_total_cm": 69.3
+     },
+     "foto": 0,
+     "dibuat": "2026-10-04T09:00:00.000Z",
+     "diubah": "2026-10-04T09:00:00.000Z"
+    }
+   ]
+  }
+ ]
+}

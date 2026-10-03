@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ukur Tangga</title>
+<meta name="description" content="Pendataan ukuran anak tangga di lapangan: tinggi riser, panjang tread, bordes. Bekerja offline di iPad.">
+<meta name="theme-color" content="#1F5F5B">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Ukur Tangga">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="ikon/ikon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="ikon/apple-touch-icon.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="atas">
+  <button class="ikon-tombol" id="tombol-kembali" aria-label="Kembali" hidden>‹</button>
+  <div class="judul-atas">
+    <div class="jejak" id="jejak"></div>
+    <h1 id="judul">Ukur Tangga</h1>
+  </div>
+  <div class="aksi-atas">
+    <button class="tombol halus" id="tombol-cetak" title="Cetak / simpan PDF">🖨 Cetak</button>
+    <button class="tombol halus" id="tombol-data" title="Ekspor, impor, cadangan">⇅ Data</button>
+  </div>
+</header>
+
+<main id="isi" tabindex="-1"></main>
+
+<div class="bilah-bawah" id="bilah-bawah" hidden></div>
+
+<dialog id="dialog">
+  <form method="dialog" id="dialog-form">
+    <h2 id="dialog-judul"></h2>
+    <div id="dialog-isi"></div>
+    <div class="dialog-aksi" id="dialog-aksi"></div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<input type="file" id="pilih-berkas" accept=".json,application/json" hidden>
+<input type="file" id="pilih-foto" accept="image/*" capture="environment" hidden>
+
+<section id="cetak" aria-hidden="true"></section>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
