@@ -1,6 +1,6 @@
 // Service worker: simpan kerangka aplikasi agar Ukur Tangga terbuka tanpa internet.
 // Naikkan VERSI setiap kali berkas aplikasi berubah agar perangkat mengambil versi baru.
-const VERSI = 'ukur-tangga-v2';
+const VERSI = 'ukur-tangga-v3';
 const BERKAS = ['./', 'index.html', 'style.css', 'app.js', 'db.js', 'model.js', 'manifest.webmanifest',
   'xlsx.js', 'ikon/ikon-192.png', 'ikon/ikon-512.png', 'ikon/apple-touch-icon.png'];
 

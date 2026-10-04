@@ -84,27 +84,28 @@ function tampilkan() {
 // ================================================================ beranda
 function halBeranda() {
   document.title = 'Ukur Tangga';
-  atas.replaceChildren(el('img', { class: 'logo', src: 'ikon/ikon-192.png', alt: '' }), el('h1', {}, 'Ukur Tangga'),
-    el('button', { class: 'tombol-garis', type: 'button', onclick: () => dialogEkspor(null) }, 'Ekspor'));
+  atas.replaceChildren(el('h1', {}, 'Ukur Tangga'),
+    el('button', { class: 'garis', type: 'button', onclick: () => dialogEkspor(null) }, 'Ekspor'));
   const daftar = [];
   const terpasang = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
   if (!terpasang && !localStorage.getItem('ukur-tangga:tip')) {
-    daftar.push(el('div', { class: 'tip' }, '📲', el('span', {}, 'Safari → Bagikan → Tambahkan ke Layar Utama, agar bisa dipakai tanpa internet.'),
-      el('button', { type: 'button', 'aria-label': 'tutup', onclick: (e) => { localStorage.setItem('ukur-tangga:tip', '1'); e.target.closest('.tip').remove(); } }, '×')));
+    daftar.push(el('div', { class: 'tip' }, el('span', {}, 'Agar bisa dipakai tanpa internet: Safari › Bagikan › Tambahkan ke Layar Utama.'),
+      el('button', { type: 'button', onclick: (e) => { localStorage.setItem('ukur-tangga:tip', '1'); e.target.closest('.tip').remove(); } }, 'Tutup')));
   }
   if (!dok.lokasi.length) {
-    daftar.push(el('div', { class: 'kosong' }, el('div', { class: 'besar' }, '🏢'), el('p', {}, 'Belum ada lokasi.')));
+    daftar.push(el('p', { class: 'kosong' }, 'Belum ada lokasi. Mulai dengan Tambah lokasi.'));
   }
+  const kotakLokasi = el('div', { class: 'daftar-lokasi' });
   for (const l of dok.lokasi) {
     const r = M.ringkasLokasi(l);
-    daftar.push(el('button', { class: 'lokasi', type: 'button', onclick: () => pergi(`#/l/${l.id}`) },
-      el('div', { class: 'ikon' }, '🏢'),
+    kotakLokasi.append(el('button', { class: 'lokasi', type: 'button', onclick: () => pergi(`#/l/${l.id}`) },
       el('div', {}, el('div', { class: 'nama' }, l.nama),
         el('div', { class: 'sub' }, `${r.n_tangga} tangga · ${r.n_anak} anak tangga${r.n_anak ? ` · ${r.lengkap} terisi` : ''}`)),
       el('span', { class: 'panah' }, '›')));
   }
+  if (dok.lokasi.length) daftar.push(kotakLokasi);
   isi.replaceChildren(...daftar);
-  bawah.replaceChildren(el('button', { class: 'tombol-utama', type: 'button', onclick: tambahLokasi }, '＋ Tambah lokasi'));
+  bawah.replaceChildren(el('button', { class: 'tombol-utama', type: 'button', onclick: tambahLokasi }, 'Tambah lokasi'));
   bawah.hidden = false;
 }
 
@@ -122,16 +123,16 @@ async function tambahLokasi() {
 function halLokasi(l) {
   document.title = `${l.nama} · Ukur Tangga`;
   atas.replaceChildren(
-    el('button', { class: 'tombol-ikon', type: 'button', 'aria-label': 'kembali', onclick: () => pergi('#/') }, '‹'),
+    el('button', { class: 'kembali', type: 'button', onclick: () => pergi('#/') }, '‹ Lokasi'),
     el('h1', {}, l.nama),
-    el('button', { class: 'tombol-ikon', type: 'button', 'aria-label': 'menu lokasi', onclick: () => menuLokasi(l) }, '⋯'),
-    el('button', { class: 'tombol-garis', type: 'button', onclick: () => dialogEkspor(l) }, 'Ekspor'));
+    el('button', { type: 'button', onclick: () => menuLokasi(l) }, 'Atur'),
+    el('button', { class: 'garis', type: 'button', onclick: () => dialogEkspor(l) }, 'Ekspor'));
   const bagian = [];
   l.tangga.forEach((t, i) => {
     bagian.push(kartuTangga(l, t, i));
     if (t.bordes_sesudah) bagian.push(barisBordes(l, t, i));
   });
-  bagian.push(el('button', { class: 'tambah-bordes', type: 'button', onclick: () => tambahBordes(l) }, '＋ Bordes · nomor mulai dari 1 lagi'));
+  bagian.push(el('button', { class: 'tambah-bordes', type: 'button', onclick: () => tambahBordes(l) }, 'Tambah bordes (nomor mulai dari 1 lagi)'));
   isi.replaceChildren(...bagian);
   bawah.hidden = true;
 }
@@ -145,24 +146,24 @@ function teksRerata(t) {
 
 function kartuTangga(l, t, i) {
   const rerata = el('div', { class: 'rerata' }, teksRerata(t) ? `rata-rata ${teksRerata(t)}` : '');
-  const baris = t.anak.map((a, j) => barisAnak(l, t, a, j, rerata));
-  const kurang = el('button', { class: 'kurang', type: 'button', 'aria-label': 'kurangi anak tangga', disabled: !t.anak.length,
-    onclick: () => kurangiAnak(l, t) }, '−');
+  const judul = `${l.tangga.length > 1 ? `Tangga ${i + 1}` : 'Tangga'} · ${t.anak.length} anak tangga`;
+  const tabel = el('table', { class: 'tabel' },
+    el('thead', {}, el('tr', {}, el('th', {}, 'No'), el('th', {}, 'Tinggi riser'), el('th', {}, 'Panjang tread'))),
+    el('tbody', {}, t.anak.map((a, j) => barisAnak(l, t, a, j, rerata))));
   return el('section', { class: 'tangga', 'data-t': t.id },
-    el('div', { class: 'kepala-tangga' }, el('div', { class: 'label-tangga' }, l.tangga.length > 1 ? `Tangga ${i + 1}` : 'Anak tangga'), rerata),
-    t.anak.length ? el('div', { class: 'judul-kolom' }, el('div', {}, 'No'), el('div', {}, 'Tinggi riser'), el('div', {}, 'Panjang tread')) : null,
-    baris,
-    el('div', { class: 'langkah' }, kurang,
-      el('div', { class: 'jumlah' }, el('b', {}, String(t.anak.length)), el('small', {}, 'anak tangga')),
-      el('button', { class: 'tambah', type: 'button', 'aria-label': 'tambah anak tangga', onclick: () => tambahAnak(l, t) }, '+')));
+    el('div', { class: 'kepala-tangga' }, el('div', { class: 'label-tangga' }, judul), rerata),
+    t.anak.length ? tabel : null,
+    el('div', { class: 'aksi-tangga', style: t.anak.length ? null : 'border-top: 1px solid var(--garis)' },
+      el('button', { class: 'kurang', type: 'button', disabled: !t.anak.length, onclick: () => kurangiAnak(l, t) }, '− Hapus terakhir'),
+      el('button', { class: 'tambah', type: 'button', onclick: () => tambahAnak(l, t) }, '+ Anak tangga')));
 }
 
 function barisAnak(l, t, a, j, rerata) {
   const lengkap = () => M.ada(a.tinggi_riser_cm) && M.ada(a.panjang_tread_cm);
-  const baris = el('div', { class: `baris${lengkap() ? ' lengkap' : ''}` });
+  const baris = el('tr', { class: lengkap() ? 'lengkap' : null });
   const segarkan = () => { baris.classList.toggle('lengkap', lengkap()); const r = teksRerata(t); rerata.textContent = r ? `rata-rata ${r}` : ''; };
-  baris.append(el('div', { class: 'no' }, String(j + 1)),
-    kotak(l, t, a, 'tinggi_riser_cm', 'riser', segarkan), kotak(l, t, a, 'panjang_tread_cm', 'tread', segarkan));
+  baris.append(el('td', { class: 'no' }, String(j + 1)),
+    el('td', {}, kotak(l, t, a, 'tinggi_riser_cm', 'riser', segarkan)), el('td', {}, kotak(l, t, a, 'panjang_tread_cm', 'tread', segarkan)));
   return baris;
 }
 
@@ -170,7 +171,7 @@ function kotak(l, t, objek, kunci, jenis, segarkan) {
   const inp = el('input', { inputmode: 'decimal', enterkeyhint: 'next', autocomplete: 'off', placeholder: '0',
     value: M.ada(objek[kunci]) ? String(objek[kunci]).replace('.', ',') : '', 'data-id': `${objek.id}:${kunci}`,
     'aria-label': jenis === 'riser' ? 'tinggi riser cm' : jenis === 'tread' ? 'panjang tread cm' : 'panjang bordes cm' });
-  const bungkus = el('label', { class: `isi${M.curiga(jenis, objek[kunci]) ? ' curiga' : ''}` }, inp, el('span', {}, 'cm'));
+  const bungkus = el('label', { class: `sel${M.curiga(jenis, objek[kunci]) ? ' curiga' : ''}` }, inp, el('span', {}, 'cm'));
   const tulis = () => {
     const v = M.bacaAngka(inp.value);
     if (Number.isNaN(v)) { bungkus.classList.add('curiga'); return; }
@@ -197,7 +198,7 @@ function kotak(l, t, objek, kunci, jenis, segarkan) {
 function fokusKe(id, kunci) {
   requestAnimationFrame(() => {
     const inp = isi.querySelector(`input[data-id="${id}:${kunci}"]`);
-    if (inp) { inp.focus({ preventScroll: true }); inp.closest('.baris, .bordes')?.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+    if (inp) { inp.focus({ preventScroll: true }); inp.closest('tr, .bordes')?.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
   });
 }
 
@@ -221,7 +222,7 @@ function barisBordes(l, t, i) {
   return el('div', { class: 'bordes', 'data-t': `b-${t.id}` },
     el('div', { class: 'label' }, 'Bordes'),
     kotak(l, { id: `b-${t.id}` }, t.bordes_sesudah, 'panjang_cm', 'bordes'),
-    el('button', { class: 'hapus', type: 'button', 'aria-label': 'hapus bordes', onclick: () => hapusBordes(l, i) }, '✕'));
+    el('button', { class: 'hapus', type: 'button', onclick: () => hapusBordes(l, i) }, 'Hapus'));
 }
 
 function tambahBordes(l) {
@@ -247,9 +248,9 @@ async function hapusBordes(l, i) {
 
 async function menuLokasi(l) {
   const pilih = await dialog(l.nama, el('div', { class: 'pilihan' },
-    el('button', { type: 'button', class: 'abu', onclick: () => tutup('nama') }, '✎  Ganti nama'),
-    el('button', { type: 'button', class: 'abu', onclick: () => tutup('studio') }, `🔗  ID tangga di Studio${l.id_studio ? `: ${l.id_studio}` : ''}`),
-    el('button', { type: 'button', class: 'bahaya', onclick: () => tutup('hapus') }, '🗑  Hapus lokasi')), [['Tutup', null, 'abu']]);
+    el('button', { type: 'button', onclick: () => tutup('nama') }, 'Ganti nama'),
+    el('button', { type: 'button', onclick: () => tutup('studio') }, `ID tangga di Studio${l.id_studio ? `: ${l.id_studio}` : ''}`),
+    el('button', { type: 'button', class: 'bahaya', onclick: () => tutup('hapus') }, 'Hapus lokasi')), [['Tutup', null, 'abu']]);
   function tutup(n) { $('#dialog').close(); setTimeout(() => lanjut(n), 0); }
   async function lanjut(n) {
     if (n === 'nama') {
@@ -313,15 +314,15 @@ async function dialogEkspor(l) {
   const judulBerkas = l ? l.nama : 'ukur_tangga';
   const keluar = (aksi) => { $('#dialog').close(); setTimeout(aksi, 0); };
   const tombol = [
-    el('button', { type: 'button', class: 'biru', disabled: !daftar.length, onclick: () => keluar(async () => {
+    el('button', { type: 'button', disabled: !daftar.length, onclick: () => keluar(async () => {
       if (await kirim(xlsxUntuk(daftar), namaBerkas(judulBerkas, 'xlsx'))) toast('Excel dibuat');
-    }) }, '📊  Excel (.xlsx)'),
-    el('button', { type: 'button', class: 'abu', disabled: !daftar.length, onclick: () => keluar(() => cetak(daftar)) }, '🖨  Cetak / PDF'),
-    el('button', { type: 'button', class: 'kuning', onclick: () => keluar(async () => {
+    }) }, 'Excel (.xlsx)'),
+    el('button', { type: 'button', disabled: !daftar.length, onclick: () => keluar(() => cetak(daftar)) }, 'Cetak / PDF'),
+    el('button', { type: 'button', onclick: () => keluar(async () => {
       const blob = new Blob([JSON.stringify(M.eksporJson(dok), null, 1)], { type: 'application/json' });
       if (await kirim(blob, namaBerkas('cadangan_ukur_tangga', 'json'))) { dok.diekspor_terakhir = M.sekarang(); ubah(); toast('Cadangan disimpan'); }
-    }) }, '💾  Simpan cadangan (semua lokasi)'),
-    el('button', { type: 'button', class: 'abu', onclick: () => keluar(pulihkan) }, '↩︎  Pulihkan dari cadangan'),
+    }) }, 'Simpan cadangan JSON (semua lokasi)'),
+    el('button', { type: 'button', onclick: () => keluar(pulihkan) }, 'Pulihkan dari cadangan'),
   ];
   await dialog(l ? `Ekspor · ${l.nama}` : 'Ekspor semua lokasi', [el('div', { class: 'pilihan' }, tombol),
     el('p', { class: 'catatan' }, `Data hanya ada di iPad ini. ${dok.diekspor_terakhir ? `Cadangan terakhir ${tgl(dok.diekspor_terakhir)}.` : 'Belum ada cadangan.'}`)],

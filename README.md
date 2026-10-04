@@ -13,13 +13,13 @@ dihapus Safari.
 
 ## Cara pakai
 
-1. **＋ Tambah lokasi** → isi nama, mis. *Gedung F*.
+1. **Tambah lokasi** → isi nama, mis. *Gedung F*.
 2. Isi **tinggi riser** → Enter → **panjang tread** → Enter. Anak tangga
-   berikutnya muncul sendiri. Tombol **＋ / −** menambah atau mengurangi anak
-   tangga (yang terhapus bisa dibatalkan).
-3. Ada bordes? Tekan **＋ Bordes**: muncul *Tangga 2* yang nomornya mulai dari
-   1 lagi. Panjang bordes boleh diisi atau dikosongkan. ✕ pada bordes
-   menggabungkan kembali kedua tangga.
+   berikutnya muncul sendiri. **+ Anak tangga** dan **− Hapus terakhir**
+   menambah atau mengurangi baris (yang terhapus bisa dibatalkan).
+3. Ada bordes? Tekan **Tambah bordes**: muncul *Tangga 2* yang nomornya mulai
+   dari 1 lagi. Panjang bordes boleh diisi atau dikosongkan. **Hapus** pada
+   bordes menggabungkan kembali kedua tangga.
 4. **Ekspor** → **Excel (.xlsx)**: lembar *Data* (lokasi, tangga, nomor, riser,
    tread, bordes) dan *Ringkasan* (rata-rata, min, maks per tangga). Juga ada
    **Cetak / PDF**, **Simpan cadangan** (JSON semua lokasi), dan **Pulihkan dari
@@ -31,7 +31,7 @@ titik desimal sama saja.
 
 ## Ke dataset RGB-D
 
-Di menu **⋯** lokasi isi **ID tangga di Studio** (mis. T01). Cadangan JSON lalu
+Di menu **Atur** lokasi isi **ID tangga di Studio** (mis. T01). Cadangan JSON lalu
 dimasukkan ke dataset dengan
 `python -m studio_rgbd.ukuran_meteran --impor <cadangan.json>`, dan
 `python -m studio_rgbd.ukuran_meteran` membandingkannya dengan ukuran sistem.
