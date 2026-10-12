@@ -21,7 +21,11 @@ JSON UTF-8. Panjang dalam **cm** (satu desimal); belum diukur = `null`.
             {"nomor": 1, "tinggi_riser_cm": 17.5, "panjang_tread_cm": 30.0},
             {"nomor": 2, "tinggi_riser_cm": 17.0, "panjang_tread_cm": 30.5}
           ],
-          "bordes_sesudah": {"panjang_cm": 120.0}   // null untuk tangga terakhir / tanpa bordes
+          "bordes_sesudah": {"panjang_cm": 120.0},  // null untuk tangga terakhir / tanpa bordes
+          "foto": [                            // boleh kosong; gambarnya ada di ZIP "Foto (.zip)"
+            {"berkas": "Gedung_F_tangga1_foto01_a3f9.jpg", "anak_tangga": 3,   // null = seluruh tangga
+             "keterangan": "meteran di riser 3", "dibuat": "ISO"}
+          ]
         },
         {"ke": 2, "anak_tangga": [ ... ], "bordes_sesudah": null}
       ]
@@ -37,6 +41,11 @@ JSON UTF-8. Panjang dalam **cm** (satu desimal); belum diukur = `null`.
   punya riser.
 - Nomor sama dengan nomor pelacak sistem RGB-D, yang juga mulai dari 1 lagi
   untuk setiap tangga baru.
+
+- `foto`: keterangan foto tangga ini. Gambarnya (JPEG, sisi terpanjang 2048
+  px) tidak ikut di JSON; ekspor **Foto (.zip)** berisi berkas dengan nama
+  `berkas` yang sama dan `foto.csv`. Memulihkan cadangan JSON tidak
+  memulihkan foto.
 
 Versi 1 (gedung → tangga → bagian) masih bisa dipulihkan; aplikasi
 mengubahnya ke versi 2 (setiap bordes memulai tangga baru).

@@ -73,6 +73,14 @@ export async function bacaFoto(id) {
   }
 }
 
+export async function daftarKunciFoto() {
+  try {
+    return await transaksi('foto', 'readonly', (s) => s.getAllKeys());
+  } catch (_) {
+    return [];
+  }
+}
+
 export async function hapusFoto(id) {
   try { await transaksi('foto', 'readwrite', (s) => s.delete(id)); } catch (_) { /* abaikan */ }
 }

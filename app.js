@@ -1,6 +1,6 @@
 import * as DB from './db.js';
 import * as M from './model.js';
-import { buatXlsx } from './xlsx.js';
+import { buatXlsx, buatZip } from './xlsx.js';
 
 let dok = M.dokumenKosong();
 const $ = (s) => document.querySelector(s);
@@ -42,7 +42,7 @@ function toast(pesan, batal = null) {
   timerToast = setTimeout(() => t.classList.remove('tampil'), batal ? 5000 : 2200);
 }
 
-function dialog(judul, isiDialog, tombol) {
+function dialog(judul, isiDialog, tombol, opsi = {}) {
   const d = $('#dialog'), f = $('#dialog-form');
   f.replaceChildren(el('h2', {}, judul), ...[].concat(isiDialog).filter(Boolean));
   return new Promise((selesai) => {
@@ -50,10 +50,11 @@ function dialog(judul, isiDialog, tombol) {
       f.append(el('div', { class: 'aksi' }, tombol.map(([teks, nilai, kelas]) =>
         el('button', { type: 'button', class: kelas, onclick: () => { d.close(); selesai(nilai); } }, teks))));
     }
-    d.onclose = () => selesai(null);
+    // Peristiwa close dialog sebelumnya bisa tiba sesudah dialog ini dibuka (dialog berantai): abaikan.
+    d.onclose = () => { if (!d.open) selesai(null); };
     d.showModal();
     const masuk = f.querySelector('input');
-    if (masuk) setTimeout(() => { masuk.focus(); masuk.select(); }, 60);
+    if (masuk && opsi.fokus !== false) setTimeout(() => { masuk.focus(); masuk.select(); }, 60);
   });
 }
 async function tanyaTeks(judul, nilai, placeholder, tombolOk = 'Simpan') {
@@ -155,7 +156,9 @@ function kartuTangga(l, t, i) {
     t.anak.length ? tabel : null,
     el('div', { class: 'aksi-tangga', style: t.anak.length ? null : 'border-top: 1px solid var(--garis)' },
       el('button', { class: 'kurang', type: 'button', disabled: !t.anak.length, onclick: () => kurangiAnak(l, t) }, '− Hapus terakhir'),
-      el('button', { class: 'tambah', type: 'button', onclick: () => tambahAnak(l, t) }, '+ Anak tangga')));
+      el('button', { class: 'foto', type: 'button', onclick: () => ambilFoto(l, t) }, t.foto.length ? `Foto (${t.foto.length})` : 'Ambil foto'),
+      el('button', { class: 'tambah', type: 'button', onclick: () => tambahAnak(l, t) }, '+ Anak tangga')),
+    stripFoto(l, t, i));
 }
 
 function barisAnak(l, t, a, j, rerata) {
@@ -240,7 +243,11 @@ async function hapusBordes(l, i) {
   const isiBerikut = berikut && berikut.anak.some((a) => M.ada(a.tinggi_riser_cm) || M.ada(a.panjang_tread_cm));
   if (isiBerikut && !await yakin('Hapus bordes?', `Tangga ${i + 2} digabung ke tangga ${i + 1}; nomornya disambung.`, 'Gabungkan')) return;
   const cadangan = JSON.parse(JSON.stringify(l.tangga));
-  if (berikut) { t.anak.push(...berikut.anak); t.bordes_sesudah = berikut.bordes_sesudah; l.tangga.splice(i + 1, 1); }
+  if (berikut) {
+    const geser = t.anak.length;               // nomor anak tangga berikutnya disambung
+    for (const f of berikut.foto || []) { if (f.nomor) f.nomor += geser; t.foto.push(f); }
+    t.anak.push(...berikut.anak); t.bordes_sesudah = berikut.bordes_sesudah; l.tangga.splice(i + 1, 1);
+  }
   else t.bordes_sesudah = null;
   sentuh(l); halLokasi(l);
   toast('Bordes dihapus', () => { l.tangga = cadangan; sentuh(l); halLokasi(l); });
@@ -268,6 +275,142 @@ async function menuLokasi(l) {
     }
   }
   return pilih;
+}
+
+// ================================================================ foto
+// Diambil dengan kamera iPad, dikecilkan ke 2048 px (JPEG) plus gambar kecil 360 px untuk deret,
+// lalu disimpan di IndexedDB iPad ini. Dokumen hanya menyimpan metadatanya (t.foto).
+const urlKecil = new Map();                    // id foto -> object URL gambar kecil, dipakai ulang antar-render
+
+async function kecilkan(berkas, maks, mutu) {
+  const url = URL.createObjectURL(berkas);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();                        // orientasi EXIF sudah diterapkan browser
+    const s = Math.min(1, maks / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = el('canvas', { width: Math.max(1, Math.round(img.naturalWidth * s)), height: Math.max(1, Math.round(img.naturalHeight * s)) });
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    return await new Promise((ok, gagal) => c.toBlob((b) => (b ? ok(b) : gagal(new Error('foto tidak dapat diproses'))), 'image/jpeg', mutu));
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function ambilFoto(l, t) {
+  const inp = $('#ambil-foto');
+  inp.value = '';
+  inp.onchange = async () => {
+    const f = inp.files && inp.files[0];
+    if (!f) return;
+    toast('Memproses foto…');
+    try {
+      const besar = await kecilkan(f, 2048, 0.85), kecil = await kecilkan(f, 360, 0.7);
+      const foto = M.fotoBaru();
+      await DB.simpanFoto(foto.id, besar);
+      await DB.simpanFoto(`${foto.id}:kecil`, kecil);
+      t.foto.push(foto);
+      l.diubah = M.sekarang();
+      await simpan();                          // langsung, jangan menunggu: gambar sudah tersimpan
+      halLokasi(l);
+      await bukaFoto(l, t, foto, true);
+    } catch (e) {
+      toast('Foto gagal disimpan: ' + e.message);
+    }
+  };
+  inp.click();
+}
+
+function stripFoto(l, t, i) {
+  if (!t.foto.length) return null;
+  return el('div', { class: 'strip-foto' }, t.foto.map((f, k) => {
+    const img = el('img', { alt: `Foto ${k + 1} tangga ${i + 1}` });
+    pasangKecil(img, f.id);
+    return el('button', { type: 'button', class: 'kecil', onclick: () => bukaFoto(l, t, f, false) },
+      img, f.nomor ? el('span', {}, `No ${f.nomor}`) : null);
+  }));
+}
+
+async function pasangKecil(img, id) {
+  let url = urlKecil.get(id);
+  if (!url) {
+    const b = (await DB.bacaFoto(`${id}:kecil`)) || (await DB.bacaFoto(id));
+    if (!b) { img.alt = 'foto tidak ada'; return; }
+    url = URL.createObjectURL(b);
+    urlKecil.set(id, url);
+  }
+  img.src = url;
+}
+
+async function bukaFoto(l, t, f, baru) {
+  const i = l.tangga.indexOf(t), k = t.foto.indexOf(f);
+  const blob = await DB.bacaFoto(f.id);
+  const url = blob ? URL.createObjectURL(blob) : null;
+  const pilih = el('select', { class: 'masuk' }, el('option', { value: '' }, 'Seluruh tangga'),
+    t.anak.map((_, j) => el('option', { value: String(j + 1) }, `Anak tangga ${j + 1}`)));
+  pilih.value = f.nomor ? String(f.nomor) : '';
+  const ket = el('input', { class: 'masuk', value: f.keterangan || '', placeholder: 'mis. meteran di riser 3', autocomplete: 'off', enterkeyhint: 'done' });
+  ket.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('#dialog-form .aksi .biru').click(); } });
+  const d = $('#dialog');
+  d.classList.add('lebar');
+  const r = await dialog(baru ? 'Foto disimpan' : `Foto ${k + 1} · ${l.tangga.length > 1 ? `Tangga ${i + 1}` : 'Tangga'}`, [
+    url ? el('img', { class: 'pratinjau', src: url, alt: '' }) : el('p', { class: 'catatan' }, 'Gambar foto ini tidak ada di iPad ini.'),
+    el('label', { class: 'kolom' }, 'Foto untuk', pilih),
+    el('label', { class: 'kolom' }, 'Keterangan', ket),
+  ], [['Hapus', 'hapus', 'bahaya'], ['Bagikan', 'bagikan', 'abu'], ['Simpan', 'ok', 'biru']], { fokus: false });
+  d.classList.remove('lebar');
+  if (url) setTimeout(() => URL.revokeObjectURL(url), 1000);
+  if (r === 'ok' || r === 'bagikan') {
+    const nomor = pilih.value ? Number(pilih.value) : null, keterangan = ket.value.trim();
+    if (nomor !== f.nomor || keterangan !== (f.keterangan || '')) { f.nomor = nomor; f.keterangan = keterangan; sentuh(l); halLokasi(l); }
+  }
+  if (r === 'bagikan' && blob) await kirim(blob, M.namaBerkasFoto(l, i, k, f));
+  if (r === 'hapus') await hapusFotoDari(l, t, f);
+}
+
+async function hapusFotoDari(l, t, f) {
+  if (!await yakin('Hapus foto?', 'Foto ini dihapus dari iPad ini.')) return;
+  const k = t.foto.indexOf(f);
+  const besar = await DB.bacaFoto(f.id), kecil = await DB.bacaFoto(`${f.id}:kecil`);
+  t.foto.splice(k, 1);
+  await DB.hapusFoto(f.id); await DB.hapusFoto(`${f.id}:kecil`);
+  if (urlKecil.has(f.id)) { URL.revokeObjectURL(urlKecil.get(f.id)); urlKecil.delete(f.id); }
+  sentuh(l); halLokasi(l);
+  toast('Foto dihapus', async () => {
+    if (besar) await DB.simpanFoto(f.id, besar);
+    if (kecil) await DB.simpanFoto(`${f.id}:kecil`, kecil);
+    t.foto.splice(k, 0, f); sentuh(l); halLokasi(l);
+  });
+}
+
+const jumlahFoto = (daftar) => daftar.reduce((n, l) => n + l.tangga.reduce((m, t) => m + (t.foto || []).length, 0), 0);
+
+// ZIP berisi semua foto lokasi terpilih + foto.csv (berkas, lokasi, tangga, anak tangga, keterangan, waktu).
+async function zipFoto(daftar) {
+  const berkas = [], baris = [['berkas', 'lokasi', 'tangga', 'anak_tangga', 'keterangan', 'dibuat']], dipakai = new Set();
+  for (const l of daftar) {
+    for (const [i, t] of l.tangga.entries()) {
+      for (const [k, f] of (t.foto || []).entries()) {
+        const b = await DB.bacaFoto(f.id);
+        if (!b) continue;
+        let nama = M.namaBerkasFoto(l, i, k, f);
+        for (let n = 2; dipakai.has(nama); n++) nama = M.namaBerkasFoto(l, i, k, f).replace(/\.jpg$/, `_${n}.jpg`);
+        dipakai.add(nama);
+        berkas.push([nama, new Uint8Array(await b.arrayBuffer())]);
+        baris.push([nama, l.nama, i + 1, f.nomor ?? '', f.keterangan || '', f.dibuat]);
+      }
+    }
+  }
+  const csv = baris.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+  berkas.push(['foto.csv', '\ufeff' + csv]);
+  return { blob: buatZip(berkas), n: berkas.length - 1 };
+}
+
+// Gambar yang tidak lagi dirujuk dokumen (lokasi/foto dihapus pada sesi sebelumnya) dibuang saat aplikasi dibuka.
+async function bersihkanFoto() {
+  if (!dok.lokasi.length) return;              // dokumen kosong/gagal dibaca: jangan sentuh foto apa pun
+  const dipakai = new Set(dok.lokasi.flatMap((l) => l.tangga.flatMap((t) => (t.foto || []).flatMap((f) => [f.id, `${f.id}:kecil`]))));
+  for (const k of await DB.daftarKunciFoto()) if (!dipakai.has(k)) await DB.hapusFoto(k);
 }
 
 // ================================================================ ekspor / impor / cetak
@@ -318,6 +461,11 @@ async function dialogEkspor(l) {
       if (await kirim(xlsxUntuk(daftar), namaBerkas(judulBerkas, 'xlsx'))) toast('Excel dibuat');
     }) }, 'Excel (.xlsx)'),
     el('button', { type: 'button', disabled: !daftar.length, onclick: () => keluar(() => cetak(daftar)) }, 'Cetak / PDF'),
+    el('button', { type: 'button', disabled: !jumlahFoto(daftar), onclick: () => keluar(async () => {
+      toast('Menyiapkan foto…');
+      const { blob, n } = await zipFoto(daftar);
+      if (await kirim(blob, namaBerkas(`foto_${judulBerkas}`, 'zip'))) toast(`${n} foto dibuat (.zip)`);
+    }) }, `Foto (.zip)${jumlahFoto(daftar) ? ` · ${jumlahFoto(daftar)} foto` : ''}`),
     el('button', { type: 'button', onclick: () => keluar(async () => {
       const blob = new Blob([JSON.stringify(M.eksporJson(dok), null, 1)], { type: 'application/json' });
       if (await kirim(blob, namaBerkas('cadangan_ukur_tangga', 'json'))) { dok.diekspor_terakhir = M.sekarang(); ubah(); toast('Cadangan disimpan'); }
@@ -325,7 +473,8 @@ async function dialogEkspor(l) {
     el('button', { type: 'button', onclick: () => keluar(pulihkan) }, 'Pulihkan dari cadangan'),
   ];
   await dialog(l ? `Ekspor · ${l.nama}` : 'Ekspor semua lokasi', [el('div', { class: 'pilihan' }, tombol),
-    el('p', { class: 'catatan' }, `Data hanya ada di iPad ini. ${dok.diekspor_terakhir ? `Cadangan terakhir ${tgl(dok.diekspor_terakhir)}.` : 'Belum ada cadangan.'}`)],
+    el('p', { class: 'catatan' }, `Data hanya ada di iPad ini. ${dok.diekspor_terakhir ? `Cadangan terakhir ${tgl(dok.diekspor_terakhir)}.` : 'Belum ada cadangan.'}`
+      + (jumlahFoto(dok.lokasi) ? ' Cadangan JSON tidak berisi gambar; simpan juga Foto (.zip).' : ''))],
   [['Tutup', null, 'abu']]);
 }
 
@@ -370,6 +519,7 @@ async function mulai() {
   dok = M.migrasi(tersimpan);
   if (tersimpan && tersimpan.versi !== M.VERSI) await simpan();      // data versi lama dipindah ke format baru
   DB.mintaPersisten();
+  if (tersimpan) setTimeout(() => bersihkanFoto().catch(() => {}), 3000);
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
   tampilkan();
 }

@@ -20,7 +20,7 @@ function crc32(data) {
   return (c ^ 0xFFFFFFFF) >>> 0;
 }
 
-function zip(berkas) {
+function zip(berkas, tipe = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
   const bagian = [], pusat = [];
   let offset = 0;
   const d = new Date();
@@ -46,8 +46,12 @@ function zip(berkas) {
   const akhir = new DataView(new ArrayBuffer(22));
   akhir.setUint32(0, 0x06054B50, true); akhir.setUint16(8, berkas.length, true); akhir.setUint16(10, berkas.length, true);
   akhir.setUint32(12, ukuranPusat, true); akhir.setUint32(16, offset, true);
-  return new Blob([...bagian, ...pusat, new Uint8Array(akhir.buffer)],
-    { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  return new Blob([...bagian, ...pusat, new Uint8Array(akhir.buffer)], { type: tipe });
+}
+
+// ZIP biasa (tanpa kompresi; JPEG memang sudah terkompresi), mis. untuk ekspor foto.
+export function buatZip(berkas) {
+  return zip(berkas, 'application/zip');
 }
 
 // ---------------------------------------------------------------- XML lembar kerja

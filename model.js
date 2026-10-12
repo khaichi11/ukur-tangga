@@ -22,7 +22,20 @@ export function anakBaru() {
 }
 
 export function tanggaBaru(nAnak = 1) {
-  return { id: idBaru('t'), anak: Array.from({ length: nAnak }, anakBaru), bordes_sesudah: null };
+  return { id: idBaru('t'), anak: Array.from({ length: nAnak }, anakBaru), bordes_sesudah: null, foto: [] };
+}
+
+// Foto: metadata di dokumen, gambarnya (JPEG) di IndexedDB dengan kunci id dan id + ':kecil'.
+export function fotoBaru() {
+  return { id: idBaru('f'), dibuat: sekarang(), nomor: null, keterangan: '' };
+}
+
+const slug = (s) => String(s || '').replace(/[^\p{L}\p{N}]+/gu, '_').replace(/^_|_$/g, '') || 'lokasi';
+
+// Nama berkas foto ke-k (0-based) tangga ke-i (0-based) di ZIP ekspor; sama dengan "berkas" di JSON.
+// Akhiran id foto membuatnya unik walau dua lokasi bernama sama.
+export function namaBerkasFoto(l, i, k, f) {
+  return `${slug(l.nama)}_tangga${i + 1}_foto${String(k + 1).padStart(2, '0')}_${String(f.id).slice(-4)}.jpg`;
 }
 
 export function lokasiBaru(nama) {
@@ -92,6 +105,8 @@ export function eksporJson(dok) {
         ke: i + 1,
         anak_tangga: t.anak.map((a, j) => ({ nomor: j + 1, tinggi_riser_cm: a.tinggi_riser_cm, panjang_tread_cm: a.panjang_tread_cm })),
         bordes_sesudah: t.bordes_sesudah ? { panjang_cm: t.bordes_sesudah.panjang_cm ?? null } : null,
+        foto: (t.foto || []).map((f, k) => ({ berkas: namaBerkasFoto(l, i, k, f), anak_tangga: f.nomor ?? null,
+          keterangan: f.keterangan || '', dibuat: f.dibuat })),
       })),
     })),
   };
@@ -124,6 +139,7 @@ function dariV2(data) {
       id: idBaru('t'),
       anak: (t.anak_tangga || []).map((a) => ({ id: idBaru('a'), tinggi_riser_cm: angka(a.tinggi_riser_cm), panjang_tread_cm: angka(a.panjang_tread_cm) })),
       bordes_sesudah: t.bordes_sesudah ? { panjang_cm: angka(t.bordes_sesudah.panjang_cm) } : null,
+      foto: [],                                      // gambar tidak ada di JSON; ada di ZIP foto
     })),
   }));
 }
@@ -133,12 +149,12 @@ function dariV1(lokasiV1) {
   return (lokasiV1 || []).map((l) => {
     const tangga = [];
     for (const t of l.tangga || []) {
-      let kini = { id: idBaru('t'), anak: [], bordes_sesudah: null };
+      let kini = { id: idBaru('t'), anak: [], bordes_sesudah: null, foto: [] };
       for (const b of t.bagian || []) {
         if (b.jenis === 'bordes') {
           kini.bordes_sesudah = { panjang_cm: angka(b.panjang_cm) };
           tangga.push(kini);
-          kini = { id: idBaru('t'), anak: [], bordes_sesudah: null };
+          kini = { id: idBaru('t'), anak: [], bordes_sesudah: null, foto: [] };
         } else {
           kini.anak.push({ id: idBaru('a'), tinggi_riser_cm: angka(b.tinggi_riser_cm), panjang_tread_cm: angka(b.panjang_tread_cm) });
         }
@@ -159,7 +175,10 @@ export function bacaImpor(data) {
 // Dokumen tersimpan di perangkat dari versi lama -> versi 2.
 export function migrasi(dok) {
   if (!dok || dok.format !== FORMAT) return dokumenKosong();
-  if (dok.versi === VERSI) return dok;
+  if (dok.versi === VERSI) {
+    for (const l of dok.lokasi) for (const t of l.tangga) if (!Array.isArray(t.foto)) t.foto = [];   // sebelum ada foto
+    return dok;
+  }
   if (dok.versi === 1) return { format: FORMAT, versi: VERSI, lokasi: dariV1(dok.lokasi), diekspor_terakhir: dok.diekspor_terakhir || null };
   return dokumenKosong();
 }

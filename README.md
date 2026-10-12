@@ -25,6 +25,16 @@ dihapus Safari.
    **Cetak / PDF**, **Simpan cadangan** (JSON semua lokasi), dan **Pulihkan dari
    cadangan**.
 
+5. **Foto**: tombol **Ambil foto** di bawah tabel setiap tangga membuka kamera
+   iPad. Foto disimpan di iPad (dikecilkan ke 2048 px) dan muncul sebagai
+   deret gambar kecil di bawah tangganya. Ketuk gambar untuk memilih **Foto
+   untuk** (seluruh tangga atau anak tangga ke-n), mengisi keterangan,
+   **Bagikan** (simpan ke Foto/Files/AirDrop), atau **Hapus** (bisa
+   dibatalkan). **Ekspor** → **Foto (.zip)** mengumpulkan semua foto beserta
+   `foto.csv` (berkas, lokasi, tangga, anak tangga, keterangan, waktu).
+   Cadangan JSON hanya berisi keterangan fotonya, bukan gambarnya, jadi simpan
+   juga ZIP fotonya.
+
 Angka di luar rentang wajar (riser < 8 atau > 25 cm, tread < 18 atau > 50 cm)
 ditandai kuning sebagai pengingat salah ketik, tetapi tetap disimpan. Koma dan
 titik desimal sama saja.

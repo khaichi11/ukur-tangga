@@ -15,7 +15,7 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; background: #FFFFFF; color: var(--tinta);
   font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-text-size-adjust: 100%; }
-button, input { font: inherit; color: inherit; }
+button, input, select { font: inherit; color: inherit; }
 button { cursor: pointer; -webkit-tap-highlight-color: transparent; border: 0; background: none; padding: 0; }
 [hidden] { display: none !important; }
 :focus-visible { outline: 2px solid var(--biru); outline-offset: 2px; }
@@ -72,6 +72,19 @@ main { max-width: 760px; margin: 0 auto; padding: 16px 16px calc(96px + var(--am
 .aksi-tangga .kurang { color: var(--redup); border-right: 1px solid var(--garis); }
 .aksi-tangga .kurang:disabled { opacity: .4; cursor: default; }
 .aksi-tangga .tambah { color: var(--biru); font-weight: 600; }
+.aksi-tangga .foto { color: var(--tinta); border-right: 1px solid var(--garis); }
+
+/* ---------- foto ---------- */
+.strip-foto { display: flex; gap: 8px; overflow-x: auto; padding: 8px 0 2px; -webkit-overflow-scrolling: touch; }
+.strip-foto .kecil { position: relative; flex: 0 0 auto; width: 104px; height: 78px; border: 1px solid var(--garis);
+  border-radius: 6px; overflow: hidden; background: #F7F8FA; }
+.strip-foto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.strip-foto span { position: absolute; left: 4px; bottom: 4px; background: rgba(17, 24, 39, .75); color: #FFFFFF;
+  font-size: .75rem; padding: 1px 6px; border-radius: 4px; font-variant-numeric: tabular-nums; }
+dialog.lebar { width: min(820px, calc(100vw - 32px)); }
+.pratinjau { width: 100%; max-height: 55vh; object-fit: contain; background: #111827; border-radius: 6px; display: block; }
+.kolom { display: flex; flex-direction: column; gap: 4px; font-size: .875rem; color: var(--redup); }
+select.masuk { background: #FFFFFF; color: var(--tinta); min-height: 44px; }
 .aksi-tangga button:active:not(:disabled) { background: var(--biru-pucat); }
 
 /* ---------- bordes ---------- */
