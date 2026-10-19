@@ -1,6 +1,7 @@
 import * as DB from './db.js';
 import * as M from './model.js';
-import { buatXlsx, buatZip } from './xlsx.js';
+import * as S from './sinkron.js';
+import { buatXlsx, buatZip, bacaZip } from './xlsx.js';
 
 let dok = M.dokumenKosong();
 const $ = (s) => document.querySelector(s);
@@ -8,7 +9,10 @@ const isi = $('#isi'), atas = $('#atas'), bawah = $('#bawah');
 
 // ================================================================ simpan otomatis
 let tunda = null;
-function ubah() { clearTimeout(tunda); tunda = setTimeout(simpan, 250); }
+function ubah() {
+  clearTimeout(tunda); tunda = setTimeout(simpan, 250);
+  sk.nUbah++; dok.perlu_sinkron = true; jadwalSinkron();
+}
 async function simpan() {
   clearTimeout(tunda); tunda = null;
   try { await DB.simpanDokumen(dok); } catch (e) { toast('Gagal menyimpan: ' + e.message); }
@@ -30,6 +34,7 @@ function el(tag, at = {}, ...anak) {
 }
 const fmt = (x) => (M.ada(x) ? x.toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '–');
 const tgl = (iso) => (iso ? new Date(iso).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
+const jam = (iso) => (iso ? new Date(iso).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
 
 let timerToast = null;
 function toast(pesan, batal = null) {
@@ -86,8 +91,13 @@ function tampilkan() {
 function halBeranda() {
   document.title = 'Ukur Tangga';
   atas.replaceChildren(el('h1', {}, 'Ukur Tangga'),
+    el('button', { id: 'tombol-google', type: 'button', onclick: dialogGoogle }, teksStatus()),
     el('button', { class: 'garis', type: 'button', onclick: () => dialogEkspor(null) }, 'Ekspor'));
   const daftar = [];
+  if (sk.hilang) {
+    daftar.push(el('div', { class: 'tip peringatan' }, el('span', {}, `${sk.hilang} foto tidak ada di perangkat ini (data browser terhapus).`),
+      el('button', { type: 'button', onclick: dialogPulihFoto }, 'Pulihkan')));
+  }
   const terpasang = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
   if (!terpasang && !localStorage.getItem('ukur-tangga:tip')) {
     daftar.push(el('div', { class: 'tip' }, el('span', {}, 'Agar bisa dipakai tanpa internet: Safari › Bagikan › Tambahkan ke Layar Utama.'),
@@ -312,6 +322,7 @@ function ambilFoto(l, t) {
       t.foto.push(foto);
       l.diubah = M.sekarang();
       await simpan();                          // langsung, jangan menunggu: gambar sudah tersimpan
+      jadwalSinkron(1000);
       halLokasi(l);
       await bukaFoto(l, t, foto, true);
     } catch (e) {
@@ -326,7 +337,7 @@ function stripFoto(l, t, i) {
   return el('div', { class: 'strip-foto' }, t.foto.map((f, k) => {
     const img = el('img', { alt: `Foto ${k + 1} tangga ${i + 1}` });
     pasangKecil(img, f.id);
-    return el('button', { type: 'button', class: 'kecil', onclick: () => bukaFoto(l, t, f, false) },
+    return el('button', { type: 'button', class: `kecil${!f.drive_id && S.atur() ? ' antre' : ''}`, 'data-f': f.id, onclick: () => bukaFoto(l, t, f, false) },
       img, f.nomor ? el('span', {}, `No ${f.nomor}`) : null);
   }));
 }
@@ -335,11 +346,52 @@ async function pasangKecil(img, id) {
   let url = urlKecil.get(id);
   if (!url) {
     const b = (await DB.bacaFoto(`${id}:kecil`)) || (await DB.bacaFoto(id));
-    if (!b) { img.alt = 'foto tidak ada'; return; }
+    img.parentElement?.classList.toggle('tiada', !b);
+    if (!b) { img.hidden = true; return; }
     url = URL.createObjectURL(b);
     urlKecil.set(id, url);
   }
+  img.hidden = false;
   img.src = url;
+}
+
+// Gambar kecil di halaman yang sedang tampil diperbarui di tempat (isian yang sedang diketik tidak terganggu).
+function segarkanKecil(f) {
+  const b = isi.querySelector(`.kecil[data-f="${f.id}"]`);
+  if (!b) return;
+  b.classList.toggle('antre', !f.drive_id && !!S.atur());
+  pasangKecil(b.querySelector('img'), f.id);
+}
+
+// Gambar foto disimpan ulang (dari Drive, ZIP, atau dipilih manual) beserta gambar kecilnya.
+async function simpanGambar(f, blob, sudahKecil) {
+  const besar = sudahKecil ? blob : await kecilkan(blob, 2048, 0.85);
+  await DB.simpanFoto(f.id, besar);
+  await DB.simpanFoto(`${f.id}:kecil`, await kecilkan(besar, 360, 0.7));
+  if (urlKecil.has(f.id)) { URL.revokeObjectURL(urlKecil.get(f.id)); urlKecil.delete(f.id); }
+  segarkanKecil(f);
+}
+
+function pilihBerkas(banyak) {
+  const inp = $('#pilih-foto');
+  inp.value = '';
+  inp.multiple = banyak;
+  return new Promise((ok) => {
+    inp.onchange = () => ok([...(inp.files || [])]);
+    inp.oncancel = () => ok([]);
+    inp.click();
+  });
+}
+
+async function gantiGambar(l, t, f) {
+  const [b] = await pilihBerkas(false);
+  if (!b) return;
+  try {
+    await simpanGambar(f, b, false);
+    f.drive_id = null; f.ganti_gambar = true; sentuh(l);    // gambar lain: unggah sebagai berkas baru
+    await periksaFoto(); halLokasi(l);
+    toast('Gambar dipasang');
+  } catch (e) { toast('Gagal: ' + e.message); }
 }
 
 async function bukaFoto(l, t, f, baru) {
@@ -354,22 +406,26 @@ async function bukaFoto(l, t, f, baru) {
   const d = $('#dialog');
   d.classList.add('lebar');
   const r = await dialog(baru ? 'Foto disimpan' : `Foto ${k + 1} · ${l.tangga.length > 1 ? `Tangga ${i + 1}` : 'Tangga'}`, [
-    url ? el('img', { class: 'pratinjau', src: url, alt: '' }) : el('p', { class: 'catatan' }, 'Gambar foto ini tidak ada di iPad ini.'),
+    url ? el('img', { class: 'pratinjau', src: url, alt: '' })
+      : el('p', { class: 'catatan' }, 'Gambar foto ini tidak ada di perangkat ini. '
+        + (f.drive_id && S.atur() ? 'Salinannya di Google Drive diunduh otomatis saat tersambung internet, atau pilih gambarnya sendiri.'
+          : 'Pulihkan dari ZIP ekspor (Ekspor › Pulihkan foto yang hilang) atau pilih gambarnya sendiri.')),
     el('label', { class: 'kolom' }, 'Foto untuk', pilih),
     el('label', { class: 'kolom' }, 'Keterangan', ket),
-  ], [['Hapus', 'hapus', 'bahaya'], ['Bagikan', 'bagikan', 'abu'], ['Simpan', 'ok', 'biru']], { fokus: false });
+  ], [['Hapus', 'hapus', 'bahaya'], blob ? ['Bagikan', 'bagikan', 'abu'] : ['Pilih gambar', 'ganti', 'abu'], ['Simpan', 'ok', 'biru']], { fokus: false });
   d.classList.remove('lebar');
   if (url) setTimeout(() => URL.revokeObjectURL(url), 1000);
-  if (r === 'ok' || r === 'bagikan') {
+  if (r === 'ok' || r === 'bagikan' || r === 'ganti') {
     const nomor = pilih.value ? Number(pilih.value) : null, keterangan = ket.value.trim();
     if (nomor !== f.nomor || keterangan !== (f.keterangan || '')) { f.nomor = nomor; f.keterangan = keterangan; sentuh(l); halLokasi(l); }
   }
   if (r === 'bagikan' && blob) await kirim(blob, M.namaBerkasFoto(l, i, k, f));
+  if (r === 'ganti') await gantiGambar(l, t, f);
   if (r === 'hapus') await hapusFotoDari(l, t, f);
 }
 
 async function hapusFotoDari(l, t, f) {
-  if (!await yakin('Hapus foto?', 'Foto ini dihapus dari iPad ini.')) return;
+  if (!await yakin('Hapus foto?', `Foto ini dihapus dari perangkat ini.${f.drive_id ? ' Salinannya di Google Drive tetap ada.' : ''}`)) return;
   const k = t.foto.indexOf(f);
   const besar = await DB.bacaFoto(f.id), kecil = await DB.bacaFoto(`${f.id}:kecil`);
   t.foto.splice(k, 1);
@@ -411,6 +467,258 @@ async function bersihkanFoto() {
   if (!dok.lokasi.length) return;              // dokumen kosong/gagal dibaca: jangan sentuh foto apa pun
   const dipakai = new Set(dok.lokasi.flatMap((l) => l.tangga.flatMap((t) => (t.foto || []).flatMap((f) => [f.id, `${f.id}:kecil`]))));
   for (const k of await DB.daftarKunciFoto()) if (!dipakai.has(k)) await DB.hapusFoto(k);
+}
+
+// ================================================================ Google Spreadsheet + Drive (sinkron.js, google/Kode.gs)
+// Foto tanpa drive_id diunggah satu per satu ke Drive; sesudahnya ukuran ditulis ulang ke spreadsheet dan
+// seluruh dokumen (termasuk drive_id) disimpan sebagai JSON di Drive. Gambar yang hilang dari perangkat
+// (data browser terhapus) diunduh kembali dari Drive. Semua kerja jaringan berurutan, satu per satu.
+const sk = { nUbah: 0, timer: null, menunggu: false, jalan: false, galat: '', antre: 0, hilang: 0, hilangDrive: 0 };
+let rantai = Promise.resolve();
+const berurutan = (kerja) => (rantai = rantai.catch(() => {}).then(kerja));
+
+function jadwalSinkron(jeda = 8000) {
+  if (!S.atur()) return;
+  clearTimeout(sk.timer);
+  sk.timer = setTimeout(sinkron, jeda);
+}
+
+function sinkron() {
+  clearTimeout(sk.timer);
+  if (!S.atur() || sk.menunggu) return rantai;
+  sk.menunggu = true;
+  return berurutan(async () => {
+    sk.menunggu = false;
+    const a = S.atur();
+    if (!a) return;
+    sk.jalan = true; tampilStatus();
+    try {
+      await unggahFoto(a);
+      if (dok.perlu_sinkron && dok.lokasi.length) await kirimData(a);
+      await unduhFotoHilang(a, false);
+      sk.galat = '';
+    } catch (e) {
+      sk.galat = e.message;
+      sk.timer = setTimeout(sinkron, 60000);   // coba lagi tiap menit selama aplikasi terbuka
+    } finally {
+      sk.jalan = false;
+      await periksaFoto(); tampilStatus();
+    }
+  });
+}
+
+async function unggahFoto(a) {
+  const ada = new Set(await DB.daftarKunciFoto());
+  for (const { l, i, k, f } of M.semuaFoto(dok.lokasi)) {
+    if (f.drive_id || !ada.has(f.id)) continue;
+    const besar = await DB.bacaFoto(f.id);
+    if (!besar) continue;
+    const kecil = await DB.bacaFoto(`${f.id}:kecil`);
+    const j = await S.panggil(a, { aksi: 'foto', id: f.id, baru: !!f.ganti_gambar, berkas: M.namaBerkasFoto(l, i, k, f),
+      mime: besar.type || 'image/jpeg', lokasi: l.nama, tangga: i + 1, anak_tangga: f.nomor ?? '', keterangan: f.keterangan || '',
+      dibuat: f.dibuat, data: await S.keBase64(besar), kecil: kecil ? await S.keBase64(kecil) : '' });
+    f.drive_id = j.drive_id; delete f.ganti_gambar;
+    dok.perlu_sinkron = true;                  // drive_id ikut JSON di Drive agar gambarnya bisa dipulihkan
+    await simpan();
+    sk.antre = Math.max(0, sk.antre - 1); tampilStatus(); segarkanKecil(f);
+  }
+}
+
+async function kirimData(a) {
+  const n = sk.nUbah;
+  const { data, ringkasan, foto } = M.tabelSheet(dok);
+  await S.panggil(a, { aksi: 'data', dokumen: dok, data, ringkasan, foto });
+  dok.sinkron_terakhir = M.sekarang();
+  if (n === sk.nUbah) dok.perlu_sinkron = false;
+  else jadwalSinkron();                        // ada perubahan selama mengirim
+  await simpan();
+}
+
+// semua = true: coba juga foto yang sebelumnya gagal diunduh (dipanggil dari tombol Pulihkan).
+async function unduhFotoHilang(a, semua, beri = null) {
+  const ada = new Set(await DB.daftarKunciFoto());
+  let n = 0, gagal = 0;
+  for (const { f } of M.semuaFoto(dok.lokasi)) {
+    if (!f.drive_id || ada.has(f.id) || (f.drive_gagal && !semua)) continue;
+    try {
+      const g = await S.panggil(a, { aksi: 'ambil_foto', drive_id: f.drive_id, id: f.id });
+      await simpanGambar(f, S.dariBase64(g.data, g.mime || 'image/jpeg'), true);
+      if (f.drive_gagal) { delete f.drive_gagal; ubah(); }
+      n++;
+      if (beri) beri(n);
+    } catch (e) {
+      if (e.kode !== 'hilang') throw e;        // jaringan putus dll.: hentikan, coba lagi nanti
+      f.drive_gagal = true; gagal++; ubah();
+    }
+  }
+  return { n, gagal };
+}
+
+async function periksaFoto() {
+  const ada = new Set(await DB.daftarKunciFoto());
+  let antre = 0, hilang = 0, hilangDrive = 0;
+  for (const { f } of M.semuaFoto(dok.lokasi)) {
+    if (!ada.has(f.id)) { hilang++; if (f.drive_id) hilangDrive++; } else if (!f.drive_id) antre++;
+  }
+  const berubah = hilang !== sk.hilang;
+  Object.assign(sk, { antre, hilang, hilangDrive });
+  if (berubah && !lokasiAktif() && !$('#dialog').open) halBeranda();
+}
+
+function teksStatus() {
+  if (!S.atur()) return 'Google';
+  if (sk.jalan) return 'Google: kirim…';
+  if (sk.galat) return 'Google: tertunda';
+  if (sk.antre) return `Google: ${sk.antre} antre`;
+  return dok.perlu_sinkron && dok.lokasi.length ? 'Google: menunggu' : 'Google: aman';
+}
+function tampilStatus() {
+  const b = document.getElementById('tombol-google');
+  if (b) b.textContent = teksStatus();
+}
+
+async function dialogGoogle() {
+  await periksaFoto();
+  const a = S.atur();
+  const url = el('input', { class: 'masuk', value: a?.url || '', placeholder: 'https://script.google.com/macros/s/…/exec',
+    autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', inputmode: 'url' });
+  const kunci = el('input', { class: 'masuk', value: a?.kunci || '', placeholder: 'sama dengan KUNCI di Kode.gs', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' });
+  const tetap = await DB.sudahPersisten();
+  const keluar = (aksi) => { $('#dialog').close(); setTimeout(aksi, 0); };
+  const status = a ? [
+    sk.galat ? `Tertunda: ${sk.galat}.` : null,
+    sk.antre ? `${sk.antre} foto belum terunggah.` : 'Semua foto sudah ada di Drive.',
+    dok.sinkron_terakhir ? `Spreadsheet terakhir diperbarui ${jam(dok.sinkron_terakhir)}.` : 'Spreadsheet belum pernah diperbarui.',
+  ] : ['Foto diunggah ke Google Drive dan ukuran ditulis ke Google Spreadsheet milik Anda, jadi tidak hilang walau data Chrome terhapus.',
+    'Cara memasang skripnya: GOOGLE.md di repo ukur-tangga.'];
+  status.push(sk.hilang ? `${sk.hilang} foto tidak ada di perangkat ini.` : null,
+    tetap ? null : 'Browser belum menjamin penyimpanan tetap: data perangkat bisa dihapus saat ruang penuh.');
+  const r = await dialog('Google Spreadsheet', [
+    el('label', { class: 'kolom' }, 'URL aplikasi web', url),
+    el('label', { class: 'kolom' }, 'Kunci', kunci),
+    a ? el('div', { class: 'pilihan' },
+      el('button', { type: 'button', onclick: () => keluar(() => sinkron().then(() => toast(sk.galat ? `Tertunda: ${sk.galat}` : 'Terkirim ke Google'))) }, 'Kirim sekarang'),
+      el('button', { type: 'button', onclick: () => keluar(() => pulihkanGoogle(a)) }, 'Pulihkan dari Google'),
+      el('button', { type: 'button', onclick: () => keluar(() => bagikanTautan(a)) }, 'Bagikan tautan sambung'),
+      el('button', { type: 'button', class: 'bahaya', onclick: () => keluar(putuskan) }, 'Putuskan')) : null,
+    el('p', { class: 'catatan' }, status.filter(Boolean).join(' ')),
+  ], [['Tutup', null, 'abu'], [a ? 'Simpan' : 'Sambungkan', 'ok', 'biru']], { fokus: !a });
+  if (r === 'ok') await sambungkan(url.value.trim(), kunci.value.trim());
+}
+
+async function sambungkan(url, kunci) {
+  if (!S.urlSah(url)) { toast('URL harus URL aplikasi web Apps Script yang berakhiran /exec'); return; }
+  const a = { url, kunci };
+  toast('Menghubungi Google…');
+  let j;
+  try { j = await S.panggil(a, { aksi: 'uji' }, 30000); } catch (e) { toast('Gagal tersambung: ' + e.message); return; }
+  if (dok.google_folder && dok.google_folder !== j.folder) {
+    for (const { f } of M.semuaFoto(dok.lokasi)) { f.drive_id = null; delete f.drive_gagal; }   // Drive lain: unggah ulang
+  }
+  dok.google_folder = j.folder;
+  S.simpanAtur(a);
+  sk.nUbah++; dok.perlu_sinkron = true; sk.galat = '';
+  await simpan(); await periksaFoto(); tampilkan();
+  toast(`Tersambung ke "${j.nama}"`);
+  const lokal = new Set(dok.lokasi.map((l) => l.id));
+  const lain = (j.lokasi || []).filter((l) => !lokal.has(l.id));
+  if (lain.length && await yakin('Pulihkan dari Google?', `Google menyimpan ${lain.length} lokasi yang tidak ada di perangkat ini `
+    + `(${lain.slice(0, 3).map((l) => l.nama).join(', ')}${lain.length > 3 ? ', …' : ''}). Tambahkan beserta fotonya?`, 'Pulihkan')) {
+    await pulihkanGoogle(a);
+  } else sinkron();
+}
+
+function pulihkanGoogle(a) {
+  return berurutan(async () => {
+    toast('Mengambil data dari Google…');
+    try {
+      const j = await S.panggil(a, { aksi: 'pulihkan' });
+      const awan = M.migrasi(j.dokumen);
+      const lokal = new Map(dok.lokasi.map((l) => [l.id, l]));
+      let nL = 0;
+      for (const l of awan.lokasi) {
+        const ini = lokal.get(l.id);
+        if (!ini) { dok.lokasi.push(l); nL++; continue; }
+        const diDrive = new Map([...M.semuaFoto([l])].map(({ f }) => [f.id, f.drive_id]));   // lokasi sama: lengkapi drive_id
+        for (const { f } of M.semuaFoto([ini])) if (!f.drive_id && diDrive.get(f.id)) f.drive_id = diDrive.get(f.id);
+      }
+      if (j.folder) dok.google_folder = j.folder;
+      sk.nUbah++; dok.perlu_sinkron = true;
+      await simpan(); tampilkan();
+      const { n, gagal } = await unduhFotoHilang(a, true, (x) => toast(`Mengunduh foto ${x}…`));
+      await periksaFoto(); tampilkan();
+      toast(`${nL} lokasi dan ${n} foto dipulihkan${gagal ? `; ${gagal} foto tidak ada lagi di Drive` : ''}`);
+    } catch (e) { toast('Gagal memulihkan: ' + e.message); }
+    jadwalSinkron(1000);
+  });
+}
+
+async function bagikanTautan(a) {
+  const t = S.tautanSambung(a);
+  try {
+    if (navigator.share) { await navigator.share({ title: 'Sambung Ukur Tangga ke Google', text: t }); return; }
+  } catch (e) { if (e.name === 'AbortError') return; }
+  try { await navigator.clipboard.writeText(t); toast('Tautan disalin. Simpan di Catatan.'); } catch (_) {
+    await dialog('Tautan sambung', el('input', { class: 'masuk', value: t, readonly: true }), [['Tutup', null, 'abu']]);
+  }
+}
+
+async function putuskan() {
+  if (!await yakin('Putuskan Google?', 'Perangkat ini berhenti mengirim ke Google. Data di Spreadsheet dan Drive tidak dihapus.', 'Putuskan')) return;
+  S.simpanAtur(null); clearTimeout(sk.timer); sk.galat = '';
+  tampilkan();
+}
+
+async function dialogPulihFoto() {
+  await periksaFoto();
+  const a = S.atur();
+  const keluar = (aksi) => { $('#dialog').close(); setTimeout(aksi, 0); };
+  await dialog('Pulihkan foto', [
+    el('p', { class: 'catatan' }, sk.hilang
+      ? `${sk.hilang} foto tercatat tetapi gambarnya tidak ada di perangkat ini${sk.hilangDrive ? `; ${sk.hilangDrive} di antaranya ada di Google Drive` : ''}.`
+      : 'Semua gambar foto ada di perangkat ini.'),
+    el('div', { class: 'pilihan' },
+      a ? el('button', { type: 'button', onclick: () => keluar(() => pulihkanGoogle(a)) }, 'Dari Google Drive') : null,
+      el('button', { type: 'button', onclick: () => keluar(pulihkanFotoBerkas) }, 'Dari ZIP ekspor atau berkas foto')),
+    el('p', { class: 'catatan' }, 'Pilih ZIP dari Ekspor › Foto (.zip), atau foto yang dulu disimpan lewat Bagikan (nama berkasnya '
+      + 'seperti Gedung_F_tangga1_foto01_a3f9.jpg). Gambar yang belum pernah diunggah atau diekspor tidak bisa dipulihkan: '
+      + 'foto dari kamera aplikasi ini biasanya tidak masuk galeri. Untuk satu foto, ketuk fotonya lalu Pilih gambar.'),
+  ], [['Tutup', null, 'abu']]);
+}
+
+async function pulihkanFotoBerkas() {
+  const berkas = await pilihBerkas(true);
+  if (!berkas.length) return;
+  toast('Membaca berkas…');
+  const masuk = [];                              // [nama, Blob, sudah JPEG 2048 px dari aplikasi ini]
+  const gambar = /\.(jpe?g|png|heic|heif|webp)$/i;
+  try {
+    for (const b of berkas) {
+      if (/\.zip$/i.test(b.name) || /zip/.test(b.type)) {
+        for (const [nama, data] of await bacaZip(await b.arrayBuffer())) {
+          const dasar = nama.split('/').pop();
+          if (gambar.test(dasar) && !dasar.startsWith('._')) {
+            const jpg = /\.jpe?g$/i.test(dasar);
+            masuk.push([dasar, new Blob([data], { type: jpg ? 'image/jpeg' : `image/${dasar.split('.').pop().toLowerCase()}` }), jpg]);
+          }
+        }
+      } else if (gambar.test(b.name) || b.type.startsWith('image/')) masuk.push([b.name, b, false]);
+    }
+  } catch (e) { toast('Gagal membaca: ' + e.message); return; }
+  const ada = new Set(await DB.daftarKunciFoto());
+  const calon = [...M.semuaFoto(dok.lokasi)].filter(({ f }) => !ada.has(f.id));
+  let n = 0, salah = 0;
+  for (const [nama, blob, jpg] of masuk) {
+    const c = M.cocokkanFoto(nama, calon);
+    if (!c) { salah++; continue; }
+    try { await simpanGambar(c.f, blob, jpg); } catch (_) { salah++; continue; }
+    calon.splice(calon.indexOf(c), 1);
+    n++;
+  }
+  await periksaFoto(); tampilkan();
+  if (n) jadwalSinkron(1000);
+  toast(n ? `${n} foto dipulihkan${salah ? `; ${salah} berkas tidak cocok` : ''}${sk.hilang ? `; ${sk.hilang} masih hilang` : ''}`
+    : `Tidak ada berkas yang cocok dengan ${sk.hilang} foto yang hilang`);
 }
 
 // ================================================================ ekspor / impor / cetak
@@ -471,9 +779,12 @@ async function dialogEkspor(l) {
       if (await kirim(blob, namaBerkas('cadangan_ukur_tangga', 'json'))) { dok.diekspor_terakhir = M.sekarang(); ubah(); toast('Cadangan disimpan'); }
     }) }, 'Simpan cadangan JSON (semua lokasi)'),
     el('button', { type: 'button', onclick: () => keluar(pulihkan) }, 'Pulihkan dari cadangan'),
+    el('button', { type: 'button', onclick: () => keluar(dialogPulihFoto) }, `Pulihkan foto yang hilang${sk.hilang ? ` · ${sk.hilang} foto` : ''}`),
   ];
+  const awan = S.atur() ? `Data dan foto juga dikirim ke Google Spreadsheet${dok.sinkron_terakhir ? ` (terakhir ${jam(dok.sinkron_terakhir)})` : ''}.`
+    : 'Data hanya ada di perangkat ini; sambungkan Google agar tidak hilang bila data browser terhapus.';
   await dialog(l ? `Ekspor · ${l.nama}` : 'Ekspor semua lokasi', [el('div', { class: 'pilihan' }, tombol),
-    el('p', { class: 'catatan' }, `Data hanya ada di iPad ini. ${dok.diekspor_terakhir ? `Cadangan terakhir ${tgl(dok.diekspor_terakhir)}.` : 'Belum ada cadangan.'}`
+    el('p', { class: 'catatan' }, `${awan} ${dok.diekspor_terakhir ? `Cadangan terakhir ${tgl(dok.diekspor_terakhir)}.` : 'Belum ada cadangan.'}`
       + (jumlahFoto(dok.lokasi) ? ' Cadangan JSON tidak berisi gambar; simpan juga Foto (.zip).' : ''))],
   [['Tutup', null, 'abu']]);
 }
@@ -487,10 +798,14 @@ function pulihkan() {
     try {
       const lokasi = M.bacaImpor(JSON.parse(await f.text()));
       const nama = new Set(dok.lokasi.map((l) => l.nama));
-      if (!await yakin('Pulihkan cadangan?', `${lokasi.length} lokasi dari "${f.name}" ditambahkan ke iPad ini.`, 'Pulihkan')) return;
+      if (!await yakin('Pulihkan cadangan?', `${lokasi.length} lokasi dari "${f.name}" ditambahkan ke perangkat ini.`, 'Pulihkan')) return;
+      const idFoto = new Set([...M.semuaFoto(dok.lokasi)].map(({ f: x }) => x.id));
+      for (const { f: x } of M.semuaFoto(lokasi)) if (idFoto.has(x.id)) x.id = M.idBaru('f');   // jangan berbagi gambar
       for (const l of lokasi) { if (nama.has(l.nama)) l.nama = `${l.nama} (cadangan)`; dok.lokasi.push(l); }
-      await simpan(); tampilkan();
-      toast(`${lokasi.length} lokasi dipulihkan`);
+      sk.nUbah++; dok.perlu_sinkron = true;
+      await simpan(); await periksaFoto(); tampilkan();
+      toast(`${lokasi.length} lokasi dipulihkan${sk.hilang ? `; ${sk.hilang} foto perlu dipulihkan gambarnya` : ''}`);
+      jadwalSinkron(1000);
     } catch (e) { toast('Gagal: ' + e.message); }
   };
   inp.click();
@@ -521,6 +836,13 @@ async function mulai() {
   DB.mintaPersisten();
   if (tersimpan) setTimeout(() => bersihkanFoto().catch(() => {}), 3000);
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+  const tautan = S.dariTautan();                 // ?google=<url>&kunci=<kunci> dari "Bagikan tautan sambung"
+  if (tautan) history.replaceState(null, '', location.pathname + location.hash);
+  await periksaFoto();
   tampilkan();
+  if (tautan) await sambungkan(tautan.url, tautan.kunci);
+  else jadwalSinkron(1500);
+  window.addEventListener('online', () => jadwalSinkron(1000));
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') jadwalSinkron(2000); });
 }
 mulai();

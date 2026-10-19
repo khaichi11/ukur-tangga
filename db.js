@@ -1,5 +1,5 @@
 // Penyimpanan di perangkat: IndexedDB (dokumen data + foto), cadangan localStorage.
-// Tidak ada data yang dikirim ke server mana pun.
+// Data hanya keluar dari perangkat lewat ekspor, atau ke Google milik pengguna bila disambungkan (sinkron.js).
 
 const NAMA_DB = 'ukur-tangga';
 const VERSI_DB = 1;
@@ -94,6 +94,10 @@ export async function mintaPersisten() {
     }
   } catch (_) { /* tidak didukung */ }
   return false;
+}
+
+export async function sudahPersisten() {
+  try { return navigator.storage && navigator.storage.persisted ? await navigator.storage.persisted() : false; } catch (_) { return false; }
 }
 
 export async function perkiraanRuang() {

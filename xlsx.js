@@ -54,6 +54,35 @@ export function buatZip(berkas) {
   return zip(berkas, 'application/zip');
 }
 
+// Pembaca ZIP (metode simpan atau deflate) untuk memulihkan foto dari ekspor "Foto (.zip)".
+// Hasil: [[nama, Uint8Array], ...]; folder dan metode lain dilewati.
+export async function bacaZip(buf) {
+  const v = new DataView(buf), u8 = new Uint8Array(buf), dek = new TextDecoder();
+  let akhir = -1;
+  for (let p = buf.byteLength - 22; p >= Math.max(0, buf.byteLength - 65557); p--) {
+    if (v.getUint32(p, true) === 0x06054b50) { akhir = p; break; }
+  }
+  if (akhir < 0) throw new Error('bukan berkas ZIP');
+  const hasil = [];
+  let p = v.getUint32(akhir + 16, true);
+  for (let n = v.getUint16(akhir + 10, true); n > 0; n--) {
+    if (v.getUint32(p, true) !== 0x02014b50) throw new Error('ZIP rusak');
+    const metode = v.getUint16(p + 10, true), ukuran = v.getUint32(p + 20, true), lokal = v.getUint32(p + 42, true);
+    const pn = v.getUint16(p + 28, true);
+    const nama = dek.decode(u8.subarray(p + 46, p + 46 + pn));
+    p += 46 + pn + v.getUint16(p + 30, true) + v.getUint16(p + 32, true);
+    const awal = lokal + 30 + v.getUint16(lokal + 26, true) + v.getUint16(lokal + 28, true);
+    const mentah = u8.subarray(awal, awal + ukuran);
+    if (nama.endsWith('/')) continue;
+    if (metode === 0) hasil.push([nama, mentah]);
+    else if (metode === 8 && typeof DecompressionStream !== 'undefined') {
+      const aliran = new Blob([mentah]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+      hasil.push([nama, new Uint8Array(await new Response(aliran).arrayBuffer())]);
+    }
+  }
+  return hasil;
+}
+
 // ---------------------------------------------------------------- XML lembar kerja
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
   .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');

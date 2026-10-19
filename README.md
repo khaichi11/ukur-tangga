@@ -1,7 +1,8 @@
 # Ukur Tangga
 
 Catat tinggi riser dan panjang tread anak tangga di lapangan dengan iPad dan
-meteran. Jalan **offline**, data **hanya di iPad**, hasilnya **Excel**.
+meteran. Jalan **offline**, data di perangkat (bisa dikirim otomatis ke
+**Google Spreadsheet** milik sendiri), hasilnya **Excel**.
 
 Buka: https://khaichi11.github.io/ukur-tangga/
 
@@ -34,6 +35,13 @@ dihapus Safari.
    `foto.csv` (berkas, lokasi, tangga, anak tangga, keterangan, waktu).
    Cadangan JSON hanya berisi keterangan fotonya, bukan gambarnya, jadi simpan
    juga ZIP fotonya.
+6. **Google** (beranda): sambungkan ke Google Spreadsheet + Drive milik sendiri
+   agar foto dan ukuran terkirim otomatis dan bisa dipulihkan bila data Chrome
+   terhapus. Cara memasang: [GOOGLE.md](GOOGLE.md).
+7. **Foto yang hilang** (gambar terhapus, catatannya masih ada; ditandai
+   *gambar hilang*): **Ekspor › Pulihkan foto yang hilang** dari Google Drive,
+   dari ZIP ekspor, atau berkas foto hasil **Bagikan**; satu foto lewat
+   **Pilih gambar**.
 
 Angka di luar rentang wajar (riser < 8 atau > 25 cm, tread < 18 atau > 50 cm)
 ditandai kuning sebagai pengingat salah ketik, tetapi tetap disimpan. Koma dan
@@ -51,7 +59,10 @@ Format cadangan: [FORMAT.md](FORMAT.md), contoh: [contoh/contoh_ekspor.json](con
 
 Tanpa build dan tanpa pustaka luar: `python3 -m http.server 8000` lalu buka
 http://localhost:8000. Berkas: `app.js` (tampilan), `model.js` (data, ringkasan,
-impor), `xlsx.js` (penulis Excel), `db.js` (penyimpanan di perangkat), `sw.js`
-(offline). Naikkan `VERSI` di `sw.js` setiap mengubah berkas aplikasi.
+impor), `xlsx.js` (penulis Excel, penulis/pembaca ZIP), `db.js` (penyimpanan di
+perangkat), `sinkron.js` (kiriman ke Google), `google/Kode.gs` (skrip Apps Script
+di akun Google pengguna), `sw.js` (offline). Naikkan `VERSI` di `sw.js` setiap
+mengubah berkas aplikasi.
 
-Tidak ada server, akun, atau pelacak; data hanya keluar saat Anda mengekspornya.
+Tidak ada server, akun, atau pelacak; data hanya keluar saat Anda mengekspornya
+atau ke Google Anda sendiri bila disambungkan.

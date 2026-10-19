@@ -47,6 +47,7 @@ main { max-width: 760px; margin: 0 auto; padding: 16px 16px calc(96px + var(--am
 .kosong { color: var(--redup); padding: 40px 4px; }
 .tip { display: flex; gap: 12px; align-items: flex-start; font-size: .875rem; color: var(--redup); margin-bottom: 16px; }
 .tip button { margin-left: auto; color: var(--biru); font-weight: 500; white-space: nowrap; }
+.tip.peringatan { background: var(--kuning-pucat); border-left: 4px solid var(--kuning); color: var(--tinta); padding: 10px 12px; }
 
 /* ---------- tabel anak tangga ---------- */
 .tangga { margin-bottom: 20px; }
@@ -81,6 +82,11 @@ main { max-width: 760px; margin: 0 auto; padding: 16px 16px calc(96px + var(--am
 .strip-foto img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .strip-foto span { position: absolute; left: 4px; bottom: 4px; background: rgba(17, 24, 39, .75); color: #FFFFFF;
   font-size: .75rem; padding: 1px 6px; border-radius: 4px; font-variant-numeric: tabular-nums; }
+/* belum terunggah ke Google: garis kuning; gambar hilang dari perangkat: kotak kuning bertulisan */
+.strip-foto .kecil.antre { border: 2px solid var(--kuning); }
+.strip-foto .kecil.tiada { background: var(--kuning-pucat); }
+.strip-foto .kecil.tiada::after { content: 'gambar hilang'; position: absolute; inset: 0; display: flex; align-items: center;
+  justify-content: center; font-size: .75rem; color: var(--tinta); }
 dialog.lebar { width: min(820px, calc(100vw - 32px)); }
 .pratinjau { width: 100%; max-height: 55vh; object-fit: contain; background: #111827; border-radius: 6px; display: block; }
 .kolom { display: flex; flex-direction: column; gap: 4px; font-size: .875rem; color: var(--redup); }

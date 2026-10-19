@@ -26,8 +26,13 @@ export function tanggaBaru(nAnak = 1) {
 }
 
 // Foto: metadata di dokumen, gambarnya (JPEG) di IndexedDB dengan kunci id dan id + ':kecil'.
+// drive_id: id berkas salinannya di Google Drive (null = belum terunggah).
 export function fotoBaru() {
-  return { id: idBaru('f'), dibuat: sekarang(), nomor: null, keterangan: '' };
+  return { id: idBaru('f'), dibuat: sekarang(), nomor: null, keterangan: '', drive_id: null };
+}
+
+export function* semuaFoto(daftarLokasi) {
+  for (const l of daftarLokasi) for (const [i, t] of l.tangga.entries()) for (const [k, f] of (t.foto || []).entries()) yield { l, i, t, k, f };
 }
 
 const slug = (s) => String(s || '').replace(/[^\p{L}\p{N}]+/gu, '_').replace(/^_|_$/g, '') || 'lokasi';
@@ -36,6 +41,17 @@ const slug = (s) => String(s || '').replace(/[^\p{L}\p{N}]+/gu, '_').replace(/^_
 // Akhiran id foto membuatnya unik walau dua lokasi bernama sama.
 export function namaBerkasFoto(l, i, k, f) {
   return `${slug(l.nama)}_tangga${i + 1}_foto${String(k + 1).padStart(2, '0')}_${String(f.id).slice(-4)}.jpg`;
+}
+
+// Berkas dari ZIP ekspor (atau yang dulu dibagikan) -> foto yang gambarnya hilang. Nama persis dulu, lalu
+// 4 huruf akhir id foto: tetap sama walau nomor fotoNN bergeser karena ada foto lain yang dihapus.
+export function cocokkanFoto(nama, calon) {
+  const persis = calon.find(({ l, i, k, f }) => namaBerkasFoto(l, i, k, f) === nama || f.berkas_asal === nama);
+  if (persis) return persis;
+  const m = nama.match(/_tangga\d+_foto\d+_([A-Za-z0-9]{4})(?:_\d+)?\.jpe?g$/i);
+  if (!m) return null;
+  const sama = calon.filter(({ f }) => String(f.id).slice(-4) === m[1]);
+  return sama.length === 1 ? sama[0] : sama.find(({ l }) => nama.startsWith(`${slug(l.nama)}_`)) || null;
 }
 
 export function lokasiBaru(nama) {
@@ -106,10 +122,31 @@ export function eksporJson(dok) {
         anak_tangga: t.anak.map((a, j) => ({ nomor: j + 1, tinggi_riser_cm: a.tinggi_riser_cm, panjang_tread_cm: a.panjang_tread_cm })),
         bordes_sesudah: t.bordes_sesudah ? { panjang_cm: t.bordes_sesudah.panjang_cm ?? null } : null,
         foto: (t.foto || []).map((f, k) => ({ berkas: namaBerkasFoto(l, i, k, f), anak_tangga: f.nomor ?? null,
-          keterangan: f.keterangan || '', dibuat: f.dibuat })),
+          keterangan: f.keterangan || '', dibuat: f.dibuat, id: f.id, drive_id: f.drive_id || null })),
       })),
     })),
   };
+}
+
+// Isi lembar Google Spreadsheet (ditulis ulang setiap sinkron) + keterangan foto untuk lembar Foto.
+export function tabelSheet(dok) {
+  const data = [['Lokasi', 'ID Studio', 'Tangga', 'No.', 'Tinggi riser (cm)', 'Panjang tread (cm)', 'Panjang bordes (cm)']];
+  const ringkasan = [['Lokasi', 'ID Studio', 'Tangga', 'Jumlah anak tangga', 'Terisi lengkap', 'Riser rata-rata (cm)', 'Riser min',
+    'Riser maks', 'Tread rata-rata (cm)', 'Tread min', 'Tread maks', 'Foto']];
+  const foto = [];
+  for (const l of dok.lokasi) {
+    const ids = l.id_studio || '';
+    l.tangga.forEach((t, i) => {
+      t.anak.forEach((a, j) => data.push([l.nama, ids, i + 1, j + 1, a.tinggi_riser_cm, a.panjang_tread_cm, null]));
+      if (t.bordes_sesudah) data.push([l.nama, ids, i + 1, 'bordes', null, null, t.bordes_sesudah.panjang_cm ?? null]);
+      const r = ringkasTangga(t);
+      ringkasan.push([l.nama, ids, i + 1, r.n, r.lengkap, r.riser?.rerata ?? null, r.riser?.min ?? null, r.riser?.maks ?? null,
+        r.tread?.rerata ?? null, r.tread?.min ?? null, r.tread?.maks ?? null, (t.foto || []).length]);
+      (t.foto || []).forEach((f, k) => foto.push({ id: f.id, lokasi: l.nama, tangga: i + 1, anak_tangga: f.nomor ?? '',
+        keterangan: f.keterangan || '', berkas: namaBerkasFoto(l, i, k, f) }));
+    });
+  }
+  return { data, ringkasan, foto };
 }
 
 // Baris tabel datar (dipakai Excel dan cetak).
@@ -139,7 +176,10 @@ function dariV2(data) {
       id: idBaru('t'),
       anak: (t.anak_tangga || []).map((a) => ({ id: idBaru('a'), tinggi_riser_cm: angka(a.tinggi_riser_cm), panjang_tread_cm: angka(a.panjang_tread_cm) })),
       bordes_sesudah: t.bordes_sesudah ? { panjang_cm: angka(t.bordes_sesudah.panjang_cm) } : null,
-      foto: [],                                      // gambar tidak ada di JSON; ada di ZIP foto
+      // Gambar tidak ada di JSON: dipulihkan dari Google Drive (drive_id) atau dari ZIP foto (berkas_asal).
+      foto: (t.foto || []).map((f) => ({ id: teks(f.id) || idBaru('f'), dibuat: teks(f.dibuat) || sekarang(),
+        nomor: Number.isInteger(f.anak_tangga) ? f.anak_tangga : null, keterangan: teks(f.keterangan),
+        drive_id: teks(f.drive_id) || null, berkas_asal: teks(f.berkas) })),
     })),
   }));
 }

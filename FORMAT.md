@@ -24,7 +24,8 @@ JSON UTF-8. Panjang dalam **cm** (satu desimal); belum diukur = `null`.
           "bordes_sesudah": {"panjang_cm": 120.0},  // null untuk tangga terakhir / tanpa bordes
           "foto": [                            // boleh kosong; gambarnya ada di ZIP "Foto (.zip)"
             {"berkas": "Gedung_F_tangga1_foto01_a3f9.jpg", "anak_tangga": 3,   // null = seluruh tangga
-             "keterangan": "meteran di riser 3", "dibuat": "ISO"}
+             "keterangan": "meteran di riser 3", "dibuat": "ISO",
+             "id": "f_1b2c3d4a3f9", "drive_id": "1AbC..."}       // drive_id null = belum di Google Drive
           ]
         },
         {"ke": 2, "anak_tangga": [ ... ], "bordes_sesudah": null}
@@ -44,8 +45,9 @@ JSON UTF-8. Panjang dalam **cm** (satu desimal); belum diukur = `null`.
 
 - `foto`: keterangan foto tangga ini. Gambarnya (JPEG, sisi terpanjang 2048
   px) tidak ikut di JSON; ekspor **Foto (.zip)** berisi berkas dengan nama
-  `berkas` yang sama dan `foto.csv`. Memulihkan cadangan JSON tidak
-  memulihkan foto.
+  `berkas` yang sama dan `foto.csv`. Memulihkan cadangan JSON memulihkan
+  catatan fotonya; gambarnya lalu diambil dari Google Drive (`drive_id`) atau
+  dicocokkan dengan ZIP lewat `berkas`.
 
 Versi 1 (gedung → tangga → bagian) masih bisa dipulihkan; aplikasi
 mengubahnya ke versi 2 (setiap bordes memulai tangga baru).
