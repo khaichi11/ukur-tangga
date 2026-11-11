@@ -26,9 +26,13 @@ dihapus Safari.
    **Cetak / PDF**, **Simpan cadangan** (JSON semua lokasi), dan **Pulihkan dari
    cadangan**.
 
-5. **Foto**: tombol **Ambil foto** di bawah tabel setiap tangga membuka kamera
-   iPad. Foto disimpan di iPad (dikecilkan ke 2048 px) dan muncul sebagai
-   deret gambar kecil di bawah tangganya. Ketuk gambar untuk memilih **Foto
+5. **Foto**: tombol **+ Foto** di bawah tabel setiap tangga menawarkan
+   **Ambil Foto** (kamera) atau **Pustaka Foto** (pilih banyak foto sekaligus).
+   Tekan lagi untuk menambah foto berikutnya. Foto dari Pustaka tetap ada di
+   aplikasi Foto iPad, jadi itu cadangan kedua; foto yang diambil langsung dari
+   kamera hanya ada di aplikasi ini (pakai **Bagikan** › Simpan Gambar atau
+   Google bila perlu cadangan). Foto disimpan di iPad (dikecilkan ke 2048 px)
+   dan muncul sebagai deret gambar kecil di bawah tangganya. Ketuk gambar untuk memilih **Foto
    untuk** (seluruh tangga atau anak tangga ke-n), mengisi keterangan,
    **Bagikan** (simpan ke Foto/Files/AirDrop), atau **Hapus** (bisa
    dibatalkan). **Ekspor** → **Foto (.zip)** mengumpulkan semua foto beserta

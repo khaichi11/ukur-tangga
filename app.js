@@ -166,7 +166,7 @@ function kartuTangga(l, t, i) {
     t.anak.length ? tabel : null,
     el('div', { class: 'aksi-tangga', style: t.anak.length ? null : 'border-top: 1px solid var(--garis)' },
       el('button', { class: 'kurang', type: 'button', disabled: !t.anak.length, onclick: () => kurangiAnak(l, t) }, '− Hapus terakhir'),
-      el('button', { class: 'foto', type: 'button', onclick: () => ambilFoto(l, t) }, t.foto.length ? `Foto (${t.foto.length})` : 'Ambil foto'),
+      el('button', { class: 'foto', type: 'button', onclick: () => tambahFoto(l, t) }, t.foto.length ? `+ Foto (${t.foto.length})` : '+ Foto'),
       el('button', { class: 'tambah', type: 'button', onclick: () => tambahAnak(l, t) }, '+ Anak tangga')),
     stripFoto(l, t, i));
 }
@@ -278,18 +278,24 @@ async function menuLokasi(l) {
       if (v !== null) { l.id_studio = v.toUpperCase(); sentuh(l); }
     } else if (n === 'hapus') {
       if (!await yakin('Hapus lokasi?', `"${l.nama}" dan semua ukurannya dihapus dari iPad ini.`)) return;
-      const k = dok.lokasi.indexOf(l);
-      dok.lokasi.splice(k, 1); ubah();
+      const k = dok.lokasi.indexOf(l), idFoto = [...M.semuaFoto([l])].map(({ f }) => f.id);
+      dok.lokasi.splice(k, 1);
+      dok.foto_dibuang = [...(dok.foto_dibuang || []), ...idFoto];     // gambarnya dibuang saat aplikasi dibuka lagi
+      ubah();
       pergi('#/');
-      toast(`"${l.nama}" dihapus`, () => { dok.lokasi.splice(k, 0, l); ubah(); tampilkan(); });
+      toast(`"${l.nama}" dihapus`, () => {
+        dok.lokasi.splice(k, 0, l);
+        dok.foto_dibuang = (dok.foto_dibuang || []).filter((id) => !idFoto.includes(id));
+        ubah(); tampilkan();
+      });
     }
   }
   return pilih;
 }
 
 // ================================================================ foto
-// Diambil dengan kamera iPad, dikecilkan ke 2048 px (JPEG) plus gambar kecil 360 px untuk deret,
-// lalu disimpan di IndexedDB iPad ini. Dokumen hanya menyimpan metadatanya (t.foto).
+// Dari kamera atau galeri iPad (boleh banyak sekaligus), dikecilkan ke 2048 px (JPEG) plus gambar kecil
+// 360 px untuk deret, lalu disimpan di IndexedDB iPad ini. Dokumen hanya menyimpan metadatanya (t.foto).
 const urlKecil = new Map();                    // id foto -> object URL gambar kecil, dipakai ulang antar-render
 
 async function kecilkan(berkas, maks, mutu) {
@@ -301,32 +307,48 @@ async function kecilkan(berkas, maks, mutu) {
     const s = Math.min(1, maks / Math.max(img.naturalWidth, img.naturalHeight));
     const c = el('canvas', { width: Math.max(1, Math.round(img.naturalWidth * s)), height: Math.max(1, Math.round(img.naturalHeight * s)) });
     c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-    return await new Promise((ok, gagal) => c.toBlob((b) => (b ? ok(b) : gagal(new Error('foto tidak dapat diproses'))), 'image/jpeg', mutu));
+    const hasil = await new Promise((ok, gagal) => c.toBlob((b) => (b ? ok(b) : gagal(new Error('foto tidak dapat diproses'))), 'image/jpeg', mutu));
+    c.width = c.height = 0;                    // lepas memori kanvas segera; iPad membatasi total memori kanvas
+    return hasil;
   } finally {
     URL.revokeObjectURL(url);
   }
 }
 
-function ambilFoto(l, t) {
+// iPad menawarkan Ambil Foto (kamera) atau Pustaka Foto (pilih banyak). Foto dari galeri tetap ada di
+// aplikasi Foto iPad, jadi itu cadangan kedua.
+function tambahFoto(l, t) {
   const inp = $('#ambil-foto');
   inp.value = '';
   inp.onchange = async () => {
-    const f = inp.files && inp.files[0];
-    if (!f) return;
-    toast('Memproses foto…');
-    try {
-      const besar = await kecilkan(f, 2048, 0.85), kecil = await kecilkan(f, 360, 0.7);
-      const foto = M.fotoBaru();
-      await DB.simpanFoto(foto.id, besar);
-      await DB.simpanFoto(`${foto.id}:kecil`, kecil);
-      t.foto.push(foto);
-      l.diubah = M.sekarang();
-      await simpan();                          // langsung, jangan menunggu: gambar sudah tersimpan
-      jadwalSinkron(1000);
-      halLokasi(l);
-      await bukaFoto(l, t, foto, true);
-    } catch (e) {
-      toast('Foto gagal disimpan: ' + e.message);
+    const berkas = [...(inp.files || [])];
+    inp.value = '';
+    if (!berkas.length) return;
+    const baru = [], gagal = [];
+    for (const [n, f] of berkas.entries()) {
+      toast(berkas.length > 1 ? `Memproses foto ${n + 1} dari ${berkas.length}…` : 'Memproses foto…');
+      try {
+        const besar = await kecilkan(f, 2048, 0.85), kecil = await kecilkan(besar, 360, 0.7);
+        const foto = M.fotoBaru();
+        await DB.simpanFoto(foto.id, besar);
+        await DB.simpanFoto(`${foto.id}:kecil`, kecil);
+        t.foto.push(foto); baru.push(foto);
+        l.diubah = M.sekarang();
+        await simpan();                        // tiap foto langsung dicatat: yang sudah masuk aman bila aplikasi tertutup
+      } catch (e) {
+        gagal.push(`${f.name || `foto ${n + 1}`}: ${e.message}`);
+      }
+    }
+    if (baru.length) { jadwalSinkron(1000); halLokasi(l); }
+    if (gagal.length) {
+      await dialog('Ada foto yang gagal disimpan', [
+        el('p', {}, `${baru.length} foto tersimpan, ${gagal.length} gagal. Tambahkan lagi foto yang gagal lewat + Foto.`),
+        el('p', { class: 'catatan' }, gagal.join(' · ')),
+      ], [['OK', null, 'biru']]);
+    } else if (baru.length === 1) {
+      await bukaFoto(l, t, baru[0], true);
+    } else {
+      toast(`${baru.length} foto ditambahkan. Ketuk foto untuk memberi nomor anak tangga atau keterangan.`);
     }
   };
   inp.click();
@@ -462,11 +484,16 @@ async function zipFoto(daftar) {
   return { blob: buatZip(berkas), n: berkas.length - 1 };
 }
 
-// Gambar yang tidak lagi dirujuk dokumen (lokasi/foto dihapus pada sesi sebelumnya) dibuang saat aplikasi dibuka.
+// Gambar dari lokasi yang dihapus pada sesi sebelumnya dibuang saat aplikasi dibuka. Hanya yang memang
+// dibuang (dok.foto_dibuang): gambar lain yang kebetulan tidak tercatat di dokumen dibiarkan, karena dulu
+// cara "buang semua yang tidak dirujuk" ikut menghapus foto bila dokumen yang terbaca bukan yang terbaru.
 async function bersihkanFoto() {
-  if (!dok.lokasi.length) return;              // dokumen kosong/gagal dibaca: jangan sentuh foto apa pun
-  const dipakai = new Set(dok.lokasi.flatMap((l) => l.tangga.flatMap((t) => (t.foto || []).flatMap((f) => [f.id, `${f.id}:kecil`]))));
-  for (const k of await DB.daftarKunciFoto()) if (!dipakai.has(k)) await DB.hapusFoto(k);
+  const dibuang = dok.foto_dibuang || [];
+  if (!dibuang.length) return;
+  const dipakai = new Set([...M.semuaFoto(dok.lokasi)].map(({ f }) => f.id));
+  for (const id of dibuang) if (!dipakai.has(id)) { await DB.hapusFoto(id); await DB.hapusFoto(`${id}:kecil`); }
+  dok.foto_dibuang = [];
+  await simpan();
 }
 
 // ================================================================ Google Spreadsheet + Drive (sinkron.js, google/Kode.gs)

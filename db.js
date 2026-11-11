@@ -21,11 +21,31 @@ function bukaDb() {
 
 let dbJanji = null;
 function db() {
-  if (!dbJanji) dbJanji = bukaDb().catch((e) => { dbJanji = null; throw e; });
+  if (!dbJanji) {
+    dbJanji = bukaDb().then((d) => {
+      // iPad menutup koneksi bila aplikasi lama di latar belakang (mis. saat kamera terbuka).
+      d.onclose = () => { dbJanji = null; };
+      d.onversionchange = () => { d.close(); dbJanji = null; };
+      return d;
+    }).catch((e) => { dbJanji = null; throw e; });
+  }
   return dbJanji;
 }
 
-function transaksi(store, mode, kerja) {
+// Gagal sekali (biasanya "Connection to Indexed Database server lost" sesudah kamera/aplikasi lain dibuka):
+// buka koneksi baru lalu ulangi, supaya foto dan data tidak gagal tersimpan diam-diam.
+async function transaksi(store, mode, kerja) {
+  try {
+    return await transaksiSekali(store, mode, kerja);
+  } catch (_) {
+    const lama = dbJanji;
+    dbJanji = null;
+    try { (await lama)?.close(); } catch (_e) { /* koneksi memang sudah putus */ }
+    return transaksiSekali(store, mode, kerja);
+  }
+}
+
+function transaksiSekali(store, mode, kerja) {
   return db().then((d) => new Promise((resolve, reject) => {
     const tx = d.transaction(store, mode);
     const hasil = kerja(tx.objectStore(store));
@@ -35,20 +55,24 @@ function transaksi(store, mode, kerja) {
   }));
 }
 
+// Ada dua salinan (IndexedDB dan localStorage); yang terbaru dipakai. Bila IndexedDB sempat gagal ditulis,
+// salinan lamanya tidak boleh menang: foto yang hanya tercatat di salinan baru akan dianggap tidak dipakai.
+// Dokumen dari versi sebelum ada `disimpan`: pakai perubahan lokasi terakhir.
+const waktuSimpan = (d) => d.disimpan || Math.max(0, ...(d.lokasi || []).map((l) => Date.parse(l.diubah) || 0));
+
 export async function bacaDokumen() {
-  try {
-    const d = await transaksi('dokumen', 'readonly', (s) => s.get('utama'));
-    if (d) return d;
-  } catch (_) { /* jatuh ke localStorage */ }
-  try {
-    const teks = localStorage.getItem(KUNCI_LS);
-    return teks ? JSON.parse(teks) : null;
-  } catch (_) {
-    return null;
+  let idb = null, ls = null;
+  try { idb = (await transaksi('dokumen', 'readonly', (s) => s.get('utama'))) || null; } catch (_) { /* pakai localStorage */ }
+  try { const teks = localStorage.getItem(KUNCI_LS); ls = teks ? JSON.parse(teks) : null; } catch (_) { /* rusak/diblokir */ }
+  if (ls && (!idb || waktuSimpan(ls) > waktuSimpan(idb))) {
+    try { await transaksi('dokumen', 'readwrite', (s) => s.put(ls, 'utama')); } catch (_) { /* dicoba lagi saat menyimpan */ }
+    return ls;
   }
+  return idb;
 }
 
 export async function simpanDokumen(dok) {
+  dok.disimpan = Date.now();
   let ok = false;
   try {
     await transaksi('dokumen', 'readwrite', (s) => s.put(dok, 'utama'));
