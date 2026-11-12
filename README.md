@@ -59,8 +59,11 @@ dihapus Safari.
    untuk kembali). Browser selalu mematikan kamera bila layar dimatikan atau
    pindah aplikasi: rekaman dijeda lalu otomatis lanjut (bagian baru) saat
    aplikasi dibuka lagi. Rekaman berhenti sendiri bila penyimpanan hampir
-   penuh. **Ekspor › Video kegiatan**: **Simpan** tiap bagian ke galeri/berkas
-   (.webm; iPhone/iPad .mp4), lalu **Hapus** agar memori lega. Bila Google
+   penuh. Saat merekam: **⇄** ganti kamera depan/belakang tanpa berhenti (bila HP
+   tidak bisa dua kamera sekaligus), **Lihat** pratinjau kecil yang sedang direkam.
+   **Ekspor › Video kegiatan**: **Putar** (geser garis waktu atau ◀/▶ 3 dan 10
+   detik), **Simpan ke galeri** (folder Download HP, tampil di galeri), lalu
+   **Hapus** agar memori lega. Bila Google
    tersambung dan folder Drive dipasang (tempel tautan folder sekali), setiap
    bagian diunggah ke `<folder>/<Lokasi>/Tangga <n>/Video` sesudah waktu tunggu
    (bawaan 10 menit, untuk **Putar**/**Hapus** video yang salah), lalu dihapus

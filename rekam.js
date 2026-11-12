@@ -160,7 +160,8 @@ export function saatBagianSelesai(f) { bagianSelesai = f; }
 export function saatBerubah(f) { pendengar = f; }
 export function saatPesan(f) { pesan = f; }
 const beritahu = () => { try { pendengar(keadaan()); } catch (_) { /* UI tidak boleh mengganggu perekam */ } };
-const modeNyata = () => (st.aliran.length > 1 ? 'dua' : st.opsi?.mode === 'depan' ? 'depan' : 'belakang');
+const modeNyata = () => (st.video.length > 1 ? 'dua' : st.arah === 'user' ? 'depan' : 'belakang');
+export const kanvas = () => st.kanvas;
 export function keadaan() {
   return {
     aktif: st.aktif, jeda: st.jeda, mulai: st.mulaiTotal, ukuran: st.ukuranTotal, sisa: st.sisa,
@@ -169,26 +170,15 @@ export function keadaan() {
   };
 }
 
-// WebM dulu: di Chrome, MP4 menahan seluruh video di memori sampai rekaman dihentikan (potongan 3 detik
-// kosong), jadi bila halaman mati videonya hilang; WebM menyerahkan potongan tiap 3 detik. Di antara
-// WebM dipilih penyandi yang menurut browser hemat daya (perangkat keras) agar HP tidak panas berjam-jam:
-// VP8 (diputar di semua HP), H.264, lalu VP9. MP4 hanya untuk Safari (iPhone/iPad), yang tidak punya WebM.
-const CALON_MIME = ['video/webm;codecs=vp8,opus', 'video/webm;codecs=h264,opus', 'video/webm;codecs=vp9,opus', 'video/webm',
+// WebM VP8: di Chrome, MP4 menahan seluruh video di memori sampai rekaman dihentikan (potongan 3 detik
+// kosong), jadi bila halaman mati videonya hilang; WebM menyerahkan potongan tiap 3 detik. VP8 diputar di
+// semua HP (galeri, Chrome, Drive); H.264 di dalam WebM tidak selalu bisa diputar, jadi tidak dipakai.
+// MP4 hanya untuk Safari (iPhone/iPad), yang tidak punya WebM.
+const CALON_MIME = ['video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9,opus', 'video/webm',
   'video/mp4;codecs=avc1.42E01F,mp4a.40.2', 'video/mp4'];
-export async function pilihMime(mutu = 'sedang') {
+export async function pilihMime() {
   if (!window.MediaRecorder) return null;
-  const ada = CALON_MIME.filter((m) => MediaRecorder.isTypeSupported(m));
-  const m = MUTU[mutu];
-  for (const mime of ada) {
-    if (!mime.includes('codecs=')) continue;
-    try {
-      const info = await navigator.mediaCapabilities.encodingInfo({ type: 'record', video: {
-        contentType: mime.replace(/,opus$/, '').replace(',mp4a.40.2', ''), width: m.lebar, height: Math.round(m.lebar * 9 / 16),
-        bitrate: m.bps, framerate: m.fps } });
-      if (info.supported && info.powerEfficient) return mime;
-    } catch (_) { break; }                                   // mediaCapabilities tidak ada: pakai urutan saja
-  }
-  return ada[0] || '';
+  return CALON_MIME.find((m) => MediaRecorder.isTypeSupported(m)) || '';
 }
 export const bisaRekam = () => !!(navigator.mediaDevices?.getUserMedia && window.MediaRecorder
   && HTMLCanvasElement.prototype.captureStream);
@@ -205,25 +195,78 @@ async function siapkanVideo(aliran) {
 }
 
 // ---------------------------------------------------------------- kamera
+function syarat(arah, w, h, perangkat = '') {
+  const m = MUTU[st.opsi.mutu];
+  const dasar = { width: { ideal: w }, height: { ideal: h }, frameRate: { ideal: m.fps, max: 30 } };
+  return perangkat ? { ...dasar, deviceId: { exact: perangkat } } : { ...dasar, facingMode: { ideal: arah } };
+}
+
+// ---------------------------------------------------------------- daftar kamera
+// Chrome di Android menampilkan tiap lensa sebagai perangkat sendiri bila HP mengizinkan, mis.
+// "camera2 0, facing back", "camera2 2, facing back". Nama lensa (utama/lebar/makro) tidak diberikan, jadi
+// ditebak dari resolusi maksimum (makro biasanya <= 2 MP, utama terbesar) dan dipastikan lewat pratinjau.
+const arahDari = (label) => (/front|depan|user|selfie/i.test(label) ? 'depan' : /back|belakang|rear|environment/i.test(label) ? 'belakang' : '');
+export async function daftarKamera(rinci = false) {
+  let d = (await navigator.mediaDevices.enumerateDevices()).filter((x) => x.kind === 'videoinput');
+  if (d.length && !d[0].label) {                      // nama baru terlihat sesudah izin kamera
+    const s = await navigator.mediaDevices.getUserMedia({ video: true });
+    hentikanAliran(s);
+    d = (await navigator.mediaDevices.enumerateDevices()).filter((x) => x.kind === 'videoinput');
+  }
+  const hasil = d.map((x, i) => ({ id: x.deviceId, label: x.label || `Kamera ${i + 1}`, arah: arahDari(x.label) }));
+  if (rinci && !st.aktif) {
+    for (const k of hasil) {
+      try {
+        const s = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: k.id } } });
+        const c = s.getVideoTracks()[0].getCapabilities ? s.getVideoTracks()[0].getCapabilities() : {};
+        k.lebarMaks = c.width?.max || 0; k.zoom = c.zoom || null;
+        if (!k.arah && c.facingMode?.length) k.arah = c.facingMode[0] === 'user' ? 'depan' : 'belakang';
+        hentikanAliran(s);
+      } catch (_) { k.gagal = true; }
+    }
+    const belakang = hasil.filter((k) => k.arah !== 'depan' && k.lebarMaks).sort((a, b) => b.lebarMaks - a.lebarMaks);
+    if (belakang.length > 1 && belakang[0].lebarMaks > belakang[belakang.length - 1].lebarMaks) {   // tebak hanya bila resolusinya berbeda
+      belakang[0].tebakan = 'utama';
+      const kecil = belakang[belakang.length - 1];
+      if (kecil.lebarMaks <= 2600) kecil.tebakan = 'makro';
+      belakang.filter((k) => !k.tebakan).forEach((k) => { k.tebakan = 'lebar/wide'; });
+    }
+  }
+  let nb = 0, nd = 0;
+  for (const k of hasil) k.nama = k.arah === 'depan' ? `Depan ${++nd}` : `Belakang ${++nb}`;
+  return hasil;
+}
+
 async function nyalakan() {
   const m = MUTU[st.opsi.mutu];
-  const syarat = (arah, w, h) => ({ facingMode: { ideal: arah }, width: { ideal: w }, height: { ideal: h },
-    frameRate: { ideal: m.fps, max: 30 } });
-  const utama = st.opsi.mode === 'depan' ? 'user' : 'environment';
+  const utama = st.opsi.utama || (st.opsi.mode === 'depan' ? 'user' : 'environment');
+  st.arah = utama;
+  const pilihan = st.opsi.kamera || '';                // deviceId kamera utama pilihan pengguna (mis. lensa wide)
   const suara = st.opsi.suara ? { echoCancellation: true, noiseSuppression: true } : false;
-  let a = await navigator.mediaDevices.getUserMedia({ video: syarat(utama, m.lebar, Math.round(m.lebar * 9 / 16)), audio: suara });
+  let a;
+  try {
+    a = await navigator.mediaDevices.getUserMedia({ video: syarat(utama, m.lebar, Math.round(m.lebar * 9 / 16), pilihan), audio: suara });
+  } catch (e) {
+    if (!pilihan) throw e;                            // kamera pilihan tidak ada lagi: pakai bawaan
+    st.opsi.kamera = '';
+    a = await navigator.mediaDevices.getUserMedia({ video: syarat(utama, m.lebar, Math.round(m.lebar * 9 / 16)), audio: suara });
+  }
   st.aliran = [a]; st.catatan = '';
   if (st.opsi.mode === 'dua') {
     let b = null;
+    const lawan = utama === 'user' ? 'environment' : 'user';
     try {
-      b = await navigator.mediaDevices.getUserMedia({ video: syarat('user', 480, 360) });
+      // Beberapa HP hanya mengizinkan dua kamera sekaligus pada resolusi kecil: coba 480x360 lalu 320x240.
+      for (const [w, h] of [[480, 360], [320, 240]]) {
+        try { b = await navigator.mediaDevices.getUserMedia({ video: syarat(lawan, w, h) }); break; } catch (e) { b = null; if (w === 320) throw e; }
+      }
       const idA = a.getVideoTracks()[0].getSettings().deviceId;
       if (idA && b.getVideoTracks()[0].getSettings().deviceId === idA) {
         hentikanAliran(b); b = null;
         const lain = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput' && d.deviceId && d.deviceId !== idA);
         const depan = lain.find((d) => /front|depan|user|facing front/i.test(d.label)) || lain[0];
         if (!depan) throw new Error('hanya satu kamera');
-        b = await navigator.mediaDevices.getUserMedia({ video: { ...syarat('user', 480, 360), facingMode: undefined, deviceId: { exact: depan.deviceId } } });
+        b = await navigator.mediaDevices.getUserMedia({ video: { ...syarat(lawan, 320, 240), facingMode: undefined, deviceId: { exact: depan.deviceId } } });
       }
       await tunggu(700);
       const ta = a.getVideoTracks()[0], tb = b.getVideoTracks()[0];
@@ -232,10 +275,11 @@ async function nyalakan() {
       st.aliran.push(b);
     } catch (_) {
       hentikanAliran(b);
-      st.catatan = 'HP ini tidak bisa memakai kamera depan dan belakang bersamaan; direkam kamera belakang + suara.';
-      if (a.getVideoTracks()[0].readyState !== 'live') {          // kamera depan merebut kamera belakang
+      st.catatan = 'HP ini tidak mengizinkan kamera depan dan belakang menyala bersamaan di browser (batasan HP/Chrome). '
+        + 'Direkam satu kamera + suara; tekan ⇄ untuk berganti kamera depan/belakang kapan saja tanpa menghentikan rekaman.';
+      if (a.getVideoTracks()[0].readyState !== 'live') {          // kamera kedua merebut kamera utama
         hentikanAliran(a);
-        a = await navigator.mediaDevices.getUserMedia({ video: syarat('environment', m.lebar, Math.round(m.lebar * 9 / 16)), audio: suara });
+        a = await navigator.mediaDevices.getUserMedia({ video: syarat(utama, m.lebar, Math.round(m.lebar * 9 / 16), st.opsi.kamera), audio: suara });
         st.aliran = [a];
       }
     }
@@ -291,7 +335,7 @@ function gambar() {
 // ---------------------------------------------------------------- bagian (berkas) video
 async function segmenBaru() {
   const m = MUTU[st.opsi.mutu];
-  if (st.mime === undefined) st.mime = await pilihMime(st.opsi.mutu);
+  if (st.mime === undefined) st.mime = await pilihMime();
   const mime = st.mime;
   const r = new MediaRecorder(st.keluar, { ...(mime ? { mimeType: mime } : {}), videoBitsPerSecond: m.bps, audioBitsPerSecond: BPS_SUARA });
   const lok = st.opsi.lokasi ? st.opsi.lokasi() : null, tgg = lok && st.opsi.tangga ? st.opsi.tangga() : null;
@@ -361,6 +405,51 @@ async function mulaiUlang() {
   try { await nyalakan(); pesan('Kamera tersambung lagi; rekaman berlanjut.'); } catch (e) { pesan('Gagal menyambung kamera: ' + e.message); await berhenti(); }
 }
 
+// Ganti kamera depan/belakang saat merekam tanpa menghentikan rekaman (kanvas tetap, sumbernya berganti).
+// Dua kamera menyala: tukar mana yang besar dan mana yang kecil di pojok.
+// perangkat: deviceId kamera tujuan (mis. lensa wide/makro); kosong = depan <-> belakang.
+export async function gantiKamera(perangkat = '', arahBaru = '') {
+  if (!st.aktif || st.jeda || !st.video.length) return keadaan();
+  const arah = arahBaru ? (arahBaru === 'depan' ? 'user' : 'environment') : st.arah === 'user' ? 'environment' : 'user';
+  if (st.video.length > 1 && !perangkat) {
+    st.video.reverse();
+  } else {
+    const m = MUTU[st.opsi.mutu];
+    if (st.video.length > 1) {                        // dua kamera: kamera kecil dimatikan dulu agar lensa lain bisa dibuka
+      st.video.slice(1).forEach((v) => { for (const t of v.srcObject?.getVideoTracks() || []) t.stop(); v.srcObject = null; });
+      st.video = st.video.slice(0, 1);
+    }
+    const baru = await navigator.mediaDevices.getUserMedia({ video: syarat(arah, m.lebar, Math.round(m.lebar * 9 / 16), perangkat) });
+    for (const a of st.aliran) for (const t of a.getVideoTracks()) t.stop();       // suara tetap jalan
+    const v = await siapkanVideo(baru);
+    st.video[0].srcObject = null;
+    st.video[0] = v;
+    st.aliran.push(baru);
+    for (const t of baru.getTracks()) {
+      t.addEventListener('ended', () => { if (st.aktif && !st.jeda && document.visibilityState === 'visible') mulaiUlang(); });
+    }
+  }
+  st.arah = arah;
+  st.opsi.utama = arah;                       // dipakai lagi bila rekaman dilanjutkan sesudah layar mati
+  st.opsi.kamera = perangkat;
+  if (perangkat && st.opsi.mode === 'dua') st.opsi.mode = arah === 'user' ? 'depan' : 'belakang';
+  beritahu();
+  return keadaan();
+}
+
+// Zoom kamera utama bila didukung (pada sebagian HP zoom < 1 = lensa wide).
+export function infoZoom() {
+  const t = st.video[0]?.srcObject?.getVideoTracks()[0];
+  const c = t?.getCapabilities ? t.getCapabilities() : {};
+  if (!c.zoom) return null;
+  return { min: c.zoom.min, max: c.zoom.max, step: c.zoom.step || 0.1, kini: t.getSettings().zoom ?? c.zoom.min };
+}
+export async function aturZoom(z) {
+  const t = st.video[0]?.srcObject?.getVideoTracks()[0];
+  if (t) await t.applyConstraints({ advanced: [{ zoom: z }] });
+}
+export const kameraKini = () => st.video[0]?.srcObject?.getVideoTracks()[0]?.getSettings().deviceId || '';
+
 // ---------------------------------------------------------------- layar dan ruang
 async function kunciLayar() {
   try {
@@ -386,7 +475,7 @@ export async function sisaRuang() {
 // opsi: { mode: 'dua'|'belakang'|'depan', mutu: 'hemat'|'sedang'|'jelas', suara: bool, lokasi: () => {id, nama}|null }
 export async function mulai(opsi) {
   if (st.aktif) return keadaan();
-  st.opsi = opsi; st.aktif = true; st.jeda = false; st.mulaiTotal = Date.now(); st.ukuranTotal = 0; st.ulang = []; st.mime = undefined;
+  st.opsi = { ...opsi }; st.aktif = true; st.jeda = false; st.mulaiTotal = Date.now(); st.ukuranTotal = 0; st.ulang = []; st.mime = undefined;
   try { await navigator.storage?.persist?.(); } catch (_) { /* opsional */ }
   try { await nyalakan(); } catch (e) { st.aktif = false; await matikanKamera(); beritahu(); throw e; }
   await kunciLayar();

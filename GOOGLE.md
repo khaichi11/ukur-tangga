@@ -32,7 +32,8 @@ Google Anda sebagai aplikasi web.
 
 1. Di beranda Ukur Tangga ketuk **Google**, tempel **alamat penghubung**
    (URL `/exec`, bukan link spreadsheet/folder) dan kunci, lalu **Sambungkan**.
-   Sesudah tersambung ada tombol **Buka spreadsheet** dan **Buka folder Drive**.
+   Sesudah tersambung ada tombol **Buka spreadsheet** dan **Folder Drive** di
+   beranda untuk memantau.
 2. Ketuk **Google › Bagikan tautan sambung** dan simpan tautannya (Catatan,
    atau kirim ke diri sendiri). Bila data Chrome terhapus, buka tautan itu:
    aplikasi tersambung lagi dan menawarkan **Pulihkan dari Google** (lokasi,
@@ -49,9 +50,11 @@ melihat sebabnya).
 
 | Tempat | Isi |
 | --- | --- |
-| Lembar **Data** | satu baris per anak tangga dan bordes; ditulis ulang setiap kiriman |
-| Lembar **Ringkasan** | per tangga: jumlah, terisi, rata-rata/min/maks riser dan tread, jumlah foto |
+| Lembar **Ringkasan** | satu baris per tangga: jumlah, terisi, rata-rata/min/maks riser dan tread, jumlah foto, tautan **Buka** ke lembar lokasinya |
+| Lembar **<nama lokasi>** | satu lembar per lokasi. Per tangga satu tabel: No., tinggi riser, panjang tread, *riser/tread sebelumnya* (sel oranye = pernah diukur ulang), kapan diubah, jumlah foto; lalu rata-rata, min, maks, dan bordes sesudahnya. Ganti nama lokasi = ganti nama lembar; lokasi yang dihapus di aplikasi lembarnya diberi tanda, tidak dihapus |
 | Lembar **Foto** | satu baris per foto: lokasi, tangga, anak tangga, keterangan, gambar kecil, tautan Drive |
+| Lembar **Riwayat** | satu baris setiap ukuran yang sudah berisi lalu diubah (ukur ulang): waktu, lokasi, tangga, no., sebelum, sesudah, selisih |
+| Lembar **Data** (tersembunyi) | semua anak tangga dalam satu tabel, termasuk kolom *… sebelumnya*; untuk filter/olah data (klik kanan tab › Tampilkan) |
 | Drive `<akar>/<Lokasi>/Tangga <n>/ukuran.csv` | ukuran anak tangga tangga itu (dan bordes sesudahnya); ditulis ulang bila berubah |
 | Drive `<akar>/<Lokasi>/Tangga <n>/Foto` | gambar JPEG 2048 px |
 | Drive `<akar>/<Lokasi>/Tangga <n>/Video` | video kegiatan tangga itu, per bagian (nama berkas berisi tanggal dan jam) |
@@ -59,7 +62,12 @@ melihat sebabnya).
 | Drive `<akar>/Cadangan` | salinan `dokumen.json` per hari, dan sebelum ada lokasi yang dihapus |
 
 `<akar>` = folder yang tautannya ditempel di aplikasi (lihat *Satu folder untuk
-semua*), atau folder `Ukur Tangga` yang dibuat sendiri bila belum ada. Folder
+semua*); bila belum ada, **folder tempat spreadsheet ini berada**; bila
+spreadsheet ada langsung di My Drive, folder `Ukur Tangga` yang dibuat sendiri.
+
+Skrip **tidak pernah menghapus** apa pun di Drive; menghapus adalah wewenang Anda,
+manual. Yang sama persis tidak dikirim ulang. Bila nama sama tetapi isinya beda,
+berkas baru masuk folder baru di sebelahnya (`Foto (2)`, `Video (2)`, ...). Folder
 lokasi/tangga ikut berganti nama bila lokasinya diganti nama atau nomor
 tangganya bergeser (bordes ditambah/dihapus).
 
@@ -84,7 +92,9 @@ dari kamera aplikasi ini biasanya tidak masuk galeri.
 
 ## Satu folder untuk semua (ukuran, foto, video)
 
-Perlu skrip versi 5 (Kode.gs terbaru). Bila skrip sudah terpasang dari versi
+Perlu skrip versi 8 (Kode.gs terbaru). Paling mudah: buat foldernya dulu, lalu
+buat spreadsheet **di dalam folder itu** (Baru › Google Spreadsheet); folder itu
+otomatis menjadi akar, tanpa perlu Pasang folder. Bila skrip sudah terpasang dari versi
 sebelumnya: tempel ulang seluruh isi [google/Kode.gs](google/Kode.gs) (KUNCI
 diisi lagi), jalankan **izinkan** sekali lagi (ada izin baru: *menghubungkan
 ke layanan eksternal*, untuk unggah video besar ke Drive), lalu terapkan versi
@@ -96,8 +106,9 @@ baru (bagian *Mengubah skrip*).
 2. Di aplikasi: **Google › Pasang folder Drive** (atau **Ekspor › Video
    kegiatan**), tempel tautannya, **Pasang folder**. Cukup sekali; **Ganti**
    bila mau pindah folder. Tautan folder ikut **Bagikan tautan sambung**.
-3. Isi folder Ukur Tangga lama (spreadsheet, `dokumen.json`, Cadangan, foto)
-   dipindah sendiri ke folder baru; foto masuk ke folder lokasinya.
+3. Seluruh isi akar lama (spreadsheet, `dokumen.json`, Cadangan, folder lokasi,
+   foto) dipindah sendiri ke folder baru; folder bernama sama digabung. Akar
+   lama dibiarkan (kosong), tidak dihapus.
 
 Video direkam per tangga: tombol **● Rekam** di kartu tangga (atau **Rekam di
 sini** untuk pindah tangga saat merekam). Setiap bagian menunggu dulu (bawaan
@@ -109,12 +120,17 @@ tertutup melanjutkan dari posisi terakhir.
 
 Salinan di HP baru dihapus sesudah skrip memeriksa berkas di Drive: masih ada,
 ukurannya sama, dan sidik SHA-256-nya sama persis dengan salinan di HP. Bila
-berbeda, salinan Drive dibuang ke Sampah dan video diunggah ulang (sampai 3
-kali); bila Drive belum memberi sidik, diperiksa lagi nanti. Selama belum
+berbeda, video diunggah ulang (sampai 3 kali) ke `Video (2)`; salinan yang beda
+dibiarkan untuk Anda periksa. Video yang sama persis sudah di Drive tidak
+dikirim ulang. Bila Drive belum memberi sidik, diperiksa lagi nanti. Selama belum
 lolos, video tetap di HP. Penghapusan otomatis bisa dimatikan, dan ada pilihan
 *hanya lewat Wi-Fi*. Unggah memakai kuota internet sebesar videonya (±330 MB
-per jam pada mutu Sedang). Menghapus video yang sudah di Drive memindahkan
-berkas Drive-nya ke Sampah (bisa dipulihkan 30 hari).
+per jam pada mutu Sedang). **Hapus** di aplikasi hanya menghapus dari HP/daftar;
+berkas di Drive dihapus manual oleh Anda.
+
+**Kirim sekarang** (tombol Google) mengirim apa yang sudah ada, sedikit demi
+sedikit: ukuran dulu, lalu foto satu per satu (satu foto gagal tidak
+menghentikan yang lain), lalu video yang sudah lewat waktu tunggu.
 
 ## Mengubah skrip
 

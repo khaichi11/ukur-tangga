@@ -12,8 +12,10 @@
 //
 // Salinan di HP baru dihapus (bisa dimatikan) sesudah skrip memeriksa berkas di Drive: masih ada (bukan
 // di Sampah), ukurannya sama, dan SHA-256-nya sama persis dengan yang dihitung dari salinan di HP. Bila
-// berbeda, salinan Drive dibuang ke Sampah dan video diunggah ulang (paling banyak 3 kali); bila Drive
-// belum memberi sidik, diperiksa lagi nanti. Selama belum lolos, video tetap di HP.
+// berbeda, video diunggah ulang (paling banyak 3 kali) ke folder baru "Video (2)" di sebelahnya; salinan
+// lama di Drive dibiarkan (aplikasi tidak pernah menghapus apa pun di Drive). Video yang sama persis sudah
+// ada di Drive tidak dikirim ulang. Bila Drive belum memberi sidik, diperiksa lagi nanti; selama belum
+// lolos, video tetap di HP.
 
 import * as R from './rekam.js';
 import * as S from './sinkron.js';
@@ -110,22 +112,22 @@ export async function unggahSekarang(s) {
   jadwal(300);
 }
 
-// Hapus video yang sudah di Drive: berkas Drive ke Sampah (bisa dipulihkan 30 hari), lalu dari daftar/HP.
-export async function hapusDiDrive(s) {
-  if (s.drive_id) await S.panggil(S.atur(), { aksi: 'video_buang', id: s.drive_id });
-  await R.hapusSegmen(s.id);
-}
-
 async function unggah(s) {
   const g = S.atur(), a = atur();
   const blob = await R.blobSegmen(s);
   const total = blob.size, mime = blob.type || 'video/webm';
   if (!s.sesi_url || s.sesi_total !== total || s.sesi_folder !== a.folder) {
     const d = new Date(s.mulai), p = (x) => String(x).padStart(2, '0');
-    const j = await S.panggil(g, { aksi: 'video_sesi', folder: a.folder, nama: R.namaVideo(s), mime, ukuran: total,
+    if (!s.sha256 || s.sha_total !== total) { s.sha256 = await sha256(blob); s.sha_total = total; }
+    const j = await S.panggil(g, { aksi: 'video_sesi', folder: a.folder, nama: R.namaVideo(s), mime, ukuran: total, sha256: s.sha256,
       tanggal: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`, lokasi: s.lokasi?.nama || 'Tanpa lokasi', lokasi_id: s.lokasi?.id || '',
       tangga: s.tangga?.nomor || '', tangga_id: s.tangga?.id || '',
       asal: location.origin, keterangan: `Ukur Tangga · ${s.lokasi?.nama || 'tanpa lokasi'}${s.tangga ? ` · tangga ${s.tangga.nomor}` : ''} · ${d.toLocaleString('id-ID')}` });
+    if (j.sudah_ada) {                                           // sama persis sudah di Drive: tidak dikirim ulang
+      s.drive_folder = j.folder; s.sesi_total = total;
+      await selesai(s, { id: j.id, link: j.link });
+      return true;
+    }
     Object.assign(s, { sesi_url: j.url, sesi_total: total, sesi_folder: a.folder, drive_folder: j.folder, terkirim: 0 });
     await R.simpanSegmen(s);
   }
@@ -176,7 +178,7 @@ async function periksa(s) {
   const g = S.atur();
   const blob = await R.blobSegmen(s);
   if (s.sesi_total && blob.size !== s.sesi_total) throw new Error('salinan di HP berubah sejak diunggah; tidak dihapus');
-  if (!s.sha256) { s.sha256 = await sha256(blob); await R.simpanSegmen(s); }
+  if (!s.sha256 || s.sha_total !== blob.size) { s.sha256 = await sha256(blob); s.sha_total = blob.size; await R.simpanSegmen(s); }
   let j;
   try { j = await S.panggil(g, { aksi: 'video_periksa', id: s.drive_id }); } catch (e) {
     if (/Aksi tidak dikenal/.test(e.message)) throw new Error('skrip Google versi lama tidak bisa memeriksa video: perbarui Kode.gs; video tetap di HP');
@@ -193,8 +195,8 @@ async function periksa(s) {
     s.verif_galat = 'Drive belum memberi sidik berkas'; await R.simpanSegmen(s);
     throw new Error('Drive belum memberi sidik berkas; diperiksa lagi nanti (video tetap di HP)');
   }
-  // Hilang atau berbeda: buang salinan Drive yang rusak, unggah ulang dari HP.
-  if (j.ada) { try { await S.panggil(g, { aksi: 'video_buang', id: s.drive_id }); } catch (_) { /* tetap unggah ulang */ } }
+  // Hilang atau berbeda: unggah ulang dari HP. Salinan Drive yang berbeda TIDAK dihapus; yang baru masuk
+  // "Video (2)" karena namanya sudah dipakai (lihat tempatBerkas_ di Kode.gs).
   Object.assign(s, { verif_galat: j.ada ? `isi di Drive berbeda (${j.ukuran} vs ${blob.size} byte)` : 'berkas tidak ada di Drive',
     drive_id: null, drive_link: '', sesi_url: null, terkirim: 0, unggah_ulang: (s.unggah_ulang || 0) + 1 });
   await R.simpanSegmen(s);

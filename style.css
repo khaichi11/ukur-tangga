@@ -148,7 +148,9 @@ dialog .masuk:focus { outline: 0; border-color: var(--biru); box-shadow: 0 0 0 1
 /* ---------- rekam video kegiatan (rekam.js) ---------- */
 .rekam { position: fixed; right: 12px; bottom: calc(14px + var(--aman-bawah)); z-index: 25; display: flex; gap: 6px; align-items: center; }
 .rekam button { min-height: 40px; padding: 0 12px; border-radius: 20px; background: #FFFFFF; border: 1px solid var(--garis);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, .15); font-weight: 600; font-size: .9rem; }
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .15); font-weight: 600; font-size: .9rem; white-space: nowrap; }
+.rekam { flex-wrap: nowrap; max-width: calc(100vw - 24px); }
+.rekam .stop { min-width: 44px; }
 .rekam .mulai-rekam { color: var(--merah); border-color: #FECACA; }
 .rekam .info-rekam { background: var(--tinta); color: #FFFFFF; border-color: var(--tinta); font-variant-numeric: tabular-nums; }
 .rekam .titik { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #EF4444; animation: kedip 1s infinite; }
@@ -179,3 +181,17 @@ button.tombol-kecil.biru { background: var(--biru); color: #FFFFFF; border-color
 .kepala-tangga .rekam-tangga.aktif { background: var(--merah); color: #FFFFFF; border-color: var(--merah); }
 video.putar-video { width: 100%; max-height: 70vh; background: #000000; border-radius: 6px; }
 select.masuk.pendek { width: auto; }
+.pilihan-baris.pantau { margin: 0 0 12px; }
+.pratinjau-rekam { position: fixed; right: 12px; bottom: calc(66px + var(--aman-bawah)); z-index: 24; width: 132px;
+  border: 2px solid #FFFFFF; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0, 0, 0, .3); background: #000000; }
+.pratinjau-rekam canvas { display: block; width: 100%; height: auto; }
+.pilihan-baris.lompat { justify-content: center; margin: 8px 0 4px; }
+@media print { .pratinjau-rekam { display: none !important; } }
+.pratinjau-rekam { cursor: pointer; transition: width .15s; }
+.pratinjau-rekam.besar { width: min(86vw, 420px); }
+.kotak-lensa { border: 1px solid var(--garis); border-radius: 8px; padding: 8px 10px; margin: 6px 0; }
+video.pratinjau-lensa { width: 100%; max-height: 40vh; background: #000000; border-radius: 6px; margin-top: 6px; }
+#dialog .pilihan button.terpilih { font-weight: 700; border-color: var(--biru); }
+.kepala-tangga .video-tangga { margin-left: 8px; min-height: 30px; padding: 0 10px; border-radius: 15px; border: 1px solid var(--garis);
+  color: var(--biru); font-size: .85rem; font-weight: 600; white-space: nowrap; }
+.kepala-tangga { flex-wrap: wrap; }
