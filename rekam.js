@@ -61,7 +61,33 @@ async function tx(stores, mode, kerja) {
 }
 const kunci = (id, i) => `${id}:${String(i).padStart(6, '0')}`;
 const rentang = (id) => IDBKeyRange.bound(`${id}:`, `${id}:￿`);
-const simpanSegmen = (s) => tx(['segmen'], 'readwrite', (t) => { t.objectStore('segmen').put({ ...s }); });
+export const simpanSegmen = (s) => tx(['segmen'], 'readwrite', (t) => { t.objectStore('segmen').put({ ...s }); });
+
+export function namaVideo(s) {
+  const d = new Date(s.mulai), p = (x) => String(x).padStart(2, '0');
+  const ext = s.mime.includes('mp4') ? 'mp4' : 'webm';
+  const dasar = (s.lokasi?.nama || 'kegiatan').replace(/[^\p{L}\p{N}]+/gu, '_').replace(/^_|_$/g, '') || 'kegiatan';
+  return `video_${dasar}${s.tangga ? `_tangga${s.tangga.nomor}` : ''}_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.${ext}`;
+}
+
+// Sesudah Drive menerima berkas: catat tautannya. Salinan di HP TIDAK dihapus di sini.
+export async function tandaiTerunggah(s, info) {
+  s.drive_id = info.id; s.drive_link = info.link || ''; s.drive_folder = info.folder || s.drive_folder || '';
+  s.terunggah = new Date().toISOString(); s.sesi_url = null;
+  await simpanSegmen(s);
+}
+
+// Sesudah ukuran dan SHA-256 berkas di Drive terbukti sama dengan di HP: baru boleh hapus potongan di HP.
+export async function tandaiTerverifikasi(s, hapusLokal) {
+  s.terverifikasi = new Date().toISOString();
+  if (hapusLokal) {
+    s.lokal = false;
+    await tx(['segmen', 'potongan'], 'readwrite', (t) => {
+      t.objectStore('potongan').delete(rentang(s.id));
+      t.objectStore('segmen').put({ ...s });
+    });
+  } else await simpanSegmen(s);
+}
 
 export async function daftar() {
   const semua = await tx(['segmen'], 'readonly', (t) => t.objectStore('segmen').getAll());
@@ -129,6 +155,8 @@ const st = {
 };
 let pendengar = () => {};
 let pesan = () => {};
+let bagianSelesai = () => {};
+export function saatBagianSelesai(f) { bagianSelesai = f; }
 export function saatBerubah(f) { pendengar = f; }
 export function saatPesan(f) { pesan = f; }
 const beritahu = () => { try { pendengar(keadaan()); } catch (_) { /* UI tidak boleh mengganggu perekam */ } };
@@ -136,7 +164,7 @@ const modeNyata = () => (st.aliran.length > 1 ? 'dua' : st.opsi?.mode === 'depan
 export function keadaan() {
   return {
     aktif: st.aktif, jeda: st.jeda, mulai: st.mulaiTotal, ukuran: st.ukuranTotal, sisa: st.sisa,
-    mode: modeNyata(), lokasi: st.seg?.lokasi?.nama || '', catatan: st.catatan,
+    mode: modeNyata(), lokasi: st.seg?.lokasi?.nama || '', tangga: st.seg?.tangga?.nomor || null, catatan: st.catatan,
     mutu: st.opsi?.mutu,
   };
 }
@@ -253,7 +281,7 @@ function gambar() {
     c.drawImage(v1, x, y, w, h);
   }
   const huruf = Math.max(13, Math.round(Math.min(W, H) / 26));
-  const teks = `${st.seg?.lokasi?.nama ? st.seg.lokasi.nama + ' · ' : ''}${new Date().toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'medium' })}`;
+  const teks = `${st.seg?.lokasi?.nama ? st.seg.lokasi.nama + ' · ' : ''}${st.seg?.tangga ? `Tangga ${st.seg.tangga.nomor} · ` : ''}${new Date().toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'medium' })}`;
   c.font = `600 ${huruf}px system-ui, sans-serif`;
   const lebarTeks = c.measureText(teks).width;
   c.fillStyle = 'rgba(0,0,0,.55)'; c.fillRect(6, H - huruf - 14, lebarTeks + 12, huruf + 10);
@@ -266,11 +294,11 @@ async function segmenBaru() {
   if (st.mime === undefined) st.mime = await pilihMime(st.opsi.mutu);
   const mime = st.mime;
   const r = new MediaRecorder(st.keluar, { ...(mime ? { mimeType: mime } : {}), videoBitsPerSecond: m.bps, audioBitsPerSecond: BPS_SUARA });
-  const lok = st.opsi.lokasi ? st.opsi.lokasi() : null;
+  const lok = st.opsi.lokasi ? st.opsi.lokasi() : null, tgg = lok && st.opsi.tangga ? st.opsi.tangga() : null;
   const sekarang = new Date().toISOString();
   const seg = {
     id: 'v' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), mulai: sekarang, diperbarui: sekarang,
-    selesai: null, lokasi: lok ? { id: lok.id, nama: lok.nama } : null, mode: modeNyata(),
+    selesai: null, lokasi: lok ? { id: lok.id, nama: lok.nama } : null, tangga: tgg ? { id: tgg.id, nomor: tgg.nomor } : null, mode: modeNyata(),
     mutu: st.opsi.mutu, mime: r.mimeType || mime || 'video/webm', ukuran: 0, n: 0, status: 'merekam', catatan: st.catatan,
   };
   await simpanSegmen(seg);
@@ -294,6 +322,7 @@ async function segmenBaru() {
     st.rantai = st.rantai.then(async () => {
       seg.status = 'selesai'; seg.selesai = new Date().toISOString();
       await simpanSegmen(seg);
+      try { bagianSelesai(seg); } catch (_) { /* pengunggah tidak boleh mengganggu perekam */ }
     }).catch(() => {});
   };
   r.onerror = () => { if (st.aktif) mulaiUlang(); };
@@ -378,11 +407,12 @@ export async function berhenti() {
   beritahu();
 }
 
-// Pindah ke lokasi lain saat merekam: mulai bagian baru agar setiap berkas berlabel satu lokasi.
+// Pindah lokasi atau tangga saat merekam: mulai bagian baru agar setiap berkas berlabel satu lokasi + tangga.
 export function lokasiBerubah() {
   if (!st.aktif || st.jeda || !st.seg) return;
-  const l = st.opsi.lokasi ? st.opsi.lokasi() : null;
-  if ((l?.id || null) !== (st.seg.lokasi?.id || null)) gantiBagian().catch(() => {});
+  const l = st.opsi.lokasi ? st.opsi.lokasi() : null, t = l && st.opsi.tangga ? st.opsi.tangga() : null;
+  if ((l?.id || null) !== (st.seg.lokasi?.id || null) || (t?.id || null) !== (st.seg.tangga?.id || null)
+      || (t?.nomor || null) !== (st.seg.tangga?.nomor || null)) gantiBagian().catch(() => {});
 }
 
 // Diurutkan: sembunyi lalu tampil lagi dengan cepat tidak boleh menyalakan kamera sebelum yang lama mati.

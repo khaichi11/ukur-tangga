@@ -159,8 +159,8 @@ dialog .masuk:focus { outline: 0; border-color: var(--biru); box-shadow: 0 0 0 1
 .gelap .waktu { font-size: 1.1rem; color: #991B1B; font-variant-numeric: tabular-nums; }
 .pilih-rekam label, label.centang { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; }
 #dialog h3 { margin: 12px 0 2px; font-size: .95rem; }
-.daftar-video .baris-video { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--garis-tipis); }
-.baris-video .ket { flex: 1; min-width: 0; }
+.daftar-video .baris-video { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 8px 0; border-top: 1px solid var(--garis-tipis); }
+.baris-video .ket { flex: 1 1 100%; min-width: 0; }
 .baris-video .nama { font-weight: 600; }
 .baris-video .sub { font-size: .85rem; color: var(--redup); }
 button.tombol-kecil { min-height: 36px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--garis); }
@@ -168,3 +168,14 @@ button.tombol-kecil.bahaya { color: var(--merah); }
 button.tombol-kecil:disabled { opacity: .4; }
 button.garis-merah { margin-top: 10px; width: 100%; min-height: 40px; border-radius: 6px; border: 1px solid #FECACA; color: var(--merah); }
 @media print { .rekam, .gelap { display: none !important; } }
+.drive-video { border: 1px solid var(--garis); border-radius: 8px; padding: 10px; margin: 4px 0 10px; }
+.pilihan-baris { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.pilihan-baris .nama-folder { flex: 1; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+a.tombol-kecil { display: inline-flex; align-items: center; min-height: 36px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--garis);
+  color: var(--biru); text-decoration: none; }
+button.tombol-kecil.biru { background: var(--biru); color: #FFFFFF; border-color: var(--biru); }
+.kepala-tangga .rekam-tangga { margin-left: 8px; min-height: 30px; padding: 0 10px; border-radius: 15px; border: 1px solid #FECACA;
+  color: var(--merah); font-size: .85rem; font-weight: 600; white-space: nowrap; }
+.kepala-tangga .rekam-tangga.aktif { background: var(--merah); color: #FFFFFF; border-color: var(--merah); }
+video.putar-video { width: 100%; max-height: 70vh; background: #000000; border-radius: 6px; }
+select.masuk.pendek { width: auto; }

@@ -57,16 +57,17 @@ export function dariBase64(b64, mime) {
 }
 
 // Tautan yang memasang URL + kunci sekali ketuk, mis. sesudah data Chrome dihapus. Simpan di Catatan.
-export function tautanSambung(a) {
+export function tautanSambung(a, folderVideo = '') {
   const u = new URL(location.href);
   u.hash = ''; u.search = '';
   u.searchParams.set('google', a.url);
   if (a.kunci) u.searchParams.set('kunci', a.kunci);
+  if (folderVideo) u.searchParams.set('folder', folderVideo);
   return u.toString();
 }
 
 export function dariTautan() {
   const q = new URLSearchParams(location.search);
   const url = q.get('google');
-  return url ? { url: url.trim(), kunci: (q.get('kunci') || '').trim() } : null;
+  return url ? { url: url.trim(), kunci: (q.get('kunci') || '').trim(), folder: (q.get('folder') || '').trim() } : null;
 }

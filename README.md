@@ -46,7 +46,8 @@ dihapus Safari.
    *gambar hilang*): **Ekspor › Pulihkan foto yang hilang** dari Google Drive,
    dari ZIP ekspor, atau berkas foto hasil **Bagikan**; satu foto lewat
    **Pilih gambar**.
-8. **Rekam video kegiatan** (tombol **● Rekam video** di pojok kanan bawah):
+8. **Rekam video kegiatan** per tangga (tombol **● Rekam** di kartu tangga,
+   **Rekam di sini** untuk pindah tangga; atau **● Rekam video** di pojok kanan bawah):
    kamera belakang, ditambah kamera depan kecil di pojok bila HP mengizinkan dua
    kamera sekaligus (banyak HP tidak; otomatis jadi kamera belakang + suara),
    dengan cap waktu dan nama lokasi tergambar di video. Ukuran tetap bisa diisi
@@ -59,7 +60,13 @@ dihapus Safari.
    pindah aplikasi: rekaman dijeda lalu otomatis lanjut (bagian baru) saat
    aplikasi dibuka lagi. Rekaman berhenti sendiri bila penyimpanan hampir
    penuh. **Ekspor › Video kegiatan**: **Simpan** tiap bagian ke galeri/berkas
-   (.webm; iPhone/iPad .mp4), lalu **Hapus** agar memori lega.
+   (.webm; iPhone/iPad .mp4), lalu **Hapus** agar memori lega. Bila Google
+   tersambung dan folder Drive dipasang (tempel tautan folder sekali), setiap
+   bagian diunggah ke `<folder>/<Lokasi>/Tangga <n>/Video` sesudah waktu tunggu
+   (bawaan 10 menit, untuk **Putar**/**Hapus** video yang salah), lalu dihapus
+   dari HP hanya bila berkas Drive terbukti sama persis (ukuran + SHA-256).
+   Ukuran (`ukuran.csv`) dan foto tangga itu masuk folder tangga yang sama
+   ([GOOGLE.md](GOOGLE.md) › *Satu folder untuk semua*).
 
 Angka di luar rentang wajar (riser < 8 atau > 25 cm, tread < 18 atau > 50 cm)
 ditandai kuning sebagai pengingat salah ketik, tetapi tetap disimpan. Koma dan
