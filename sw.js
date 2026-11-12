@@ -1,6 +1,6 @@
 // Service worker: simpan kerangka aplikasi agar Ukur Tangga terbuka tanpa internet.
 // Naikkan VERSI setiap kali berkas aplikasi berubah agar perangkat mengambil versi baru.
-const VERSI = 'ukur-tangga-v12';
+const VERSI = 'ukur-tangga-v13';
 const BERKAS = ['./', 'index.html', 'style.css', 'app.js', 'db.js', 'model.js', 'sinkron.js', 'rekam.js', 'unggah_video.js', 'inti_unggah.js', 'manifest.webmanifest',
   'xlsx.js', 'ikon/ikon-192.png', 'ikon/ikon-512.png', 'ikon/apple-touch-icon.png'];
 
@@ -61,9 +61,16 @@ self.addEventListener('activate', (e) => {
 });
 
 // Jaringan dulu (versi terbaru bila online), cache bila offline.
+// Hanya jawaban sukses yang disimpan. Bila situs tidak ada lagi (mis. dipindah dan repo dijadikan private:
+// 404) atau tanpa internet, aplikasi tetap dibuka dari salinan tersimpan, jadi data di HP ini (ukuran, foto,
+// video yang belum terunggah) tetap bisa dibuka dan dipindahkan.
+const dariCache = (req) => caches.match(req, { ignoreSearch: true }).then((r) => r || caches.match('index.html'));
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return;
   e.respondWith(fetch(e.request)
-    .then((r) => { const salin = r.clone(); caches.open(VERSI).then((c) => c.put(e.request, salin)); return r; })
-    .catch(() => caches.match(e.request, { ignoreSearch: true }).then((r) => r || caches.match('index.html'))));
+    .then((r) => {
+      if (!r.ok) return dariCache(e.request).then((c) => c || r);
+      const salin = r.clone(); caches.open(VERSI).then((c) => c.put(e.request, salin)); return r;
+    })
+    .catch(() => dariCache(e.request)));
 });
