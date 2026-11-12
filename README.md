@@ -46,6 +46,20 @@ dihapus Safari.
    *gambar hilang*): **Ekspor › Pulihkan foto yang hilang** dari Google Drive,
    dari ZIP ekspor, atau berkas foto hasil **Bagikan**; satu foto lewat
    **Pilih gambar**.
+8. **Rekam video kegiatan** (tombol **● Rekam video** di pojok kanan bawah):
+   kamera belakang, ditambah kamera depan kecil di pojok bila HP mengizinkan dua
+   kamera sekaligus (banyak HP tidak; otomatis jadi kamera belakang + suara),
+   dengan cap waktu dan nama lokasi tergambar di video. Ukuran tetap bisa diisi
+   selama merekam. Mutu **Hemat** ±170 MB/jam, **Sedang** ±330 MB/jam (bawaan),
+   **Jelas** ±690 MB/jam. Video disimpan ke penyimpanan aplikasi setiap 3 detik
+   dan dipotong per 10 menit (dan setiap pindah lokasi), jadi bila HP mati atau
+   browser tertutup paksa yang hilang paling banyak 3 detik. Layar dijaga tetap
+   menyala; **Gelap** menghitamkan layar untuk menghemat baterai (ketuk dua kali
+   untuk kembali). Browser selalu mematikan kamera bila layar dimatikan atau
+   pindah aplikasi: rekaman dijeda lalu otomatis lanjut (bagian baru) saat
+   aplikasi dibuka lagi. Rekaman berhenti sendiri bila penyimpanan hampir
+   penuh. **Ekspor › Video kegiatan**: **Simpan** tiap bagian ke galeri/berkas
+   (.webm; iPhone/iPad .mp4), lalu **Hapus** agar memori lega.
 
 Angka di luar rentang wajar (riser < 8 atau > 25 cm, tread < 18 atau > 50 cm)
 ditandai kuning sebagai pengingat salah ketik, tetapi tetap disimpan. Koma dan

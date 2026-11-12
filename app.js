@@ -1,6 +1,7 @@
 import * as DB from './db.js';
 import * as M from './model.js';
 import * as S from './sinkron.js';
+import * as R from './rekam.js';
 import { buatXlsx, buatZip, bacaZip } from './xlsx.js';
 
 let dok = M.dokumenKosong();
@@ -83,8 +84,10 @@ window.addEventListener('popstate', () => tampilkan());
 window.addEventListener('hashchange', () => tampilkan());
 function tampilkan() {
   const l = lokasiAktif();
-  if (location.hash.startsWith('#/l/') && !l) { history.replaceState(null, '', '#/'); halBeranda(); return; }
-  if (l) halLokasi(l); else halBeranda();
+  if (location.hash.startsWith('#/l/') && !l) { history.replaceState(null, '', '#/'); halBeranda(); }
+  else if (l) halLokasi(l); else halBeranda();
+  R.lokasiBerubah();
+  tampilRekam();
 }
 
 // ================================================================ beranda
@@ -755,6 +758,141 @@ function namaBerkas(dasar, akhiran) {
   return `${bersih}_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}.${akhiran}`;
 }
 
+// ================================================================ video kegiatan (rekam.js)
+const rekamEl = $('#rekam');
+let timerRekam = null;
+const durasiTeks = (ms) => {
+  const d = Math.max(0, Math.floor(ms / 1000)), p = (x) => String(x).padStart(2, '0');
+  return `${Math.floor(d / 3600)}:${p(Math.floor(d / 60) % 60)}:${p(d % 60)}`;
+};
+const mbTeks = (b) => {
+  const f = (x, d) => x.toLocaleString('id-ID', { maximumFractionDigits: d });
+  return b >= 1e9 ? `${f(b / 1e9, 2)} GB` : `${f(b / 1e6, b < 1e7 ? 1 : 0)} MB`;
+};
+
+function tampilRekam() {
+  const k = R.keadaan();
+  rekamEl.style.bottom = bawah.hidden ? '' : '76px';
+  if (!k.aktif) {
+    clearInterval(timerRekam); timerRekam = null;
+    rekamEl.replaceChildren(el('button', { class: 'mulai-rekam', type: 'button', onclick: dialogRekam }, '● Rekam video'));
+    rekamEl.hidden = !R.bisaRekam();
+    return;
+  }
+  if (!timerRekam) timerRekam = setInterval(tampilRekam, 1000);
+  rekamEl.hidden = false;
+  rekamEl.replaceChildren(
+    el('button', { class: 'info-rekam', type: 'button', onclick: infoRekam },
+      el('span', { class: 'titik' }), ` ${durasiTeks(Date.now() - k.mulai)} · ${mbTeks(k.ukuran)}${k.mode === 'dua' ? ' · 2 kamera' : ''}`),
+    el('button', { type: 'button', onclick: layarGelap }, 'Gelap'),
+    el('button', { class: 'stop', type: 'button', onclick: hentikanRekam }, '■ Stop'));
+  const g = $('#gelap .waktu');
+  if (g) g.textContent = `Merekam ${durasiTeks(Date.now() - k.mulai)} · ${mbTeks(k.ukuran)}`;
+}
+
+async function dialogRekam() {
+  const simpanan = JSON.parse(localStorage.getItem('ukur-tangga:rekam') || '{}');
+  const radio = (nama, nilai, pilihan) => el('div', { class: 'pilih-rekam' }, pilihan.map(([v, teks]) =>
+    el('label', {}, el('input', { type: 'radio', name: nama, value: v, ...(v === nilai ? { checked: '' } : {}) }), el('span', {}, teks))));
+  const sisa = await R.sisaRuang();
+  const info = el('p', { class: 'catatan' });
+  const isian = el('div', {},
+    el('h3', {}, 'Kamera'),
+    radio('mode', simpanan.mode || 'dua', [['dua', 'Belakang + depan kecil di pojok (bila HP bisa)'], ['belakang', 'Belakang saja'], ['depan', 'Depan saja']]),
+    el('h3', {}, 'Mutu'),
+    radio('mutu', simpanan.mutu || 'sedang', Object.entries(R.MUTU).map(([k, m]) =>
+      [k, `${m.label}: ${m.lebar} px, ${m.fps} fps, ±${R.mbPerJam(k, true)} MB/jam`])),
+    el('label', { class: 'centang' }, el('input', { type: 'checkbox', name: 'suara', ...(simpanan.suara !== false ? { checked: '' } : {}) }), el('span', {}, 'Rekam suara')),
+    info);
+  const nilai = () => ({ mode: isian.querySelector('[name=mode]:checked').value, mutu: isian.querySelector('[name=mutu]:checked').value,
+    suara: isian.querySelector('[name=suara]').checked });
+  const segarkan = () => {
+    const v = nilai(), mb = R.mbPerJam(v.mutu, v.suara);
+    info.textContent = (sisa ? `Ruang untuk aplikasi ±${mbTeks(sisa)}: cukup ±${Math.floor(sisa / 1e6 / mb)} jam. ` : '')
+      + 'Video tersimpan tiap 3 detik dan dipotong per 10 menit. Layar dijaga menyala; bila layar mati atau pindah aplikasi, '
+      + 'rekaman dijeda lalu lanjut sendiri saat aplikasi dibuka lagi. Simpan/hapus video di Ekspor › Video kegiatan.';
+  };
+  isian.addEventListener('change', segarkan); segarkan();
+  if (await dialog('Rekam video kegiatan', isian, [['Batal', null, 'abu'], ['Mulai rekam', 'ok', 'biru']], { fokus: false }) !== 'ok') return;
+  const v = nilai();
+  localStorage.setItem('ukur-tangga:rekam', JSON.stringify(v));
+  try {
+    const k = await R.mulai({ ...v, lokasi: lokasiAktif });
+    toast(k.catatan || 'Merekam. Isi ukuran seperti biasa.');
+  } catch (e) {
+    toast('Tidak bisa merekam: ' + (e.name === 'NotAllowedError' ? 'izin kamera/mikrofon ditolak' : e.message));
+  }
+  tampilRekam();
+}
+
+async function hentikanRekam() {
+  await R.berhenti();
+  $('#gelap')?.remove();
+  toast('Rekaman disimpan. Lihat di Ekspor › Video kegiatan.');
+  tampilRekam();
+}
+
+async function infoRekam() {
+  const k = R.keadaan();
+  const kamera = k.mode === 'dua' ? 'belakang + depan' : k.mode === 'depan' ? 'depan' : 'belakang';
+  await dialog('Sedang merekam', [
+    el('p', {}, `${durasiTeks(Date.now() - k.mulai)} · ${mbTeks(k.ukuran)} · kamera ${kamera} · mutu ${R.MUTU[k.mutu].label}`),
+    el('p', { class: 'catatan' }, `${k.lokasi ? `Bagian ini berlabel ${k.lokasi}. ` : ''}${k.catatan}${k.sisa ? ` Sisa ruang ±${mbTeks(k.sisa)}.` : ''}`),
+  ], [['Tutup', null, 'abu']]);
+}
+
+function layarGelap() {
+  const g = el('div', { id: 'gelap', class: 'gelap' }, el('div', { class: 'waktu' }, 'Merekam'),
+    el('div', { class: 'petunjuk' }, 'Layar gelap menghemat baterai. Ketuk dua kali untuk kembali.'));
+  g.addEventListener('dblclick', () => g.remove());
+  let ketuk = 0;
+  g.addEventListener('touchend', () => { const t = Date.now(); if (t - ketuk < 400) g.remove(); ketuk = t; });
+  document.body.append(g);
+  tampilRekam();
+}
+
+const namaVideo = (s) => {
+  const d = new Date(s.mulai), p = (x) => String(x).padStart(2, '0');
+  const ext = s.mime.includes('mp4') ? 'mp4' : 'webm';
+  const dasar = (s.lokasi?.nama || 'kegiatan').replace(/[^\p{L}\p{N}]+/gu, '_').replace(/^_|_$/g, '') || 'kegiatan';
+  return `video_${dasar}_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.${ext}`;
+};
+
+async function dialogVideo() {
+  const kotakDaftar = el('div', { class: 'daftar-video' });
+  const segarkan = async () => {
+    const daftar = await R.daftar();
+    const total = daftar.reduce((n, s) => n + s.ukuran, 0);
+    const baris = daftar.map((s) => {
+      const lama = Date.parse(s.selesai || s.diperbarui) - Date.parse(s.mulai);
+      const keadaanTeks = s.status === 'merekam' ? ' · sedang direkam' : s.status === 'terputus' ? ' · terputus (tersimpan sampai potongan terakhir)' : '';
+      return el('div', { class: 'baris-video' },
+        el('div', { class: 'ket' }, el('div', { class: 'nama' }, s.lokasi?.nama || 'Tanpa lokasi'),
+          el('div', { class: 'sub' }, `${jam(s.mulai)} · ${durasiTeks(lama)} · ${mbTeks(s.ukuran)}${keadaanTeks}${s.disimpan ? ' · sudah disimpan' : ''}`)),
+        el('button', { type: 'button', class: 'tombol-kecil', ...(s.status === 'merekam' ? { disabled: '' } : {}), onclick: async () => {
+          toast('Menyiapkan video…');
+          if (await kirim(await R.blobSegmen(s), namaVideo(s))) { await R.tandaiDisimpan(s); segarkan(); }
+        } }, 'Simpan'),
+        el('button', { type: 'button', class: 'tombol-kecil bahaya', ...(s.status === 'merekam' ? { disabled: '' } : {}), onclick: async () => {
+          if (!s.disimpan && !confirm('Video ini belum disimpan. Hapus dari aplikasi?')) return;
+          await R.hapusSegmen(s.id); segarkan();
+        } }, 'Hapus'));
+    });
+    const sudah = daftar.filter((s) => s.disimpan && s.status !== 'merekam');
+    kotakDaftar.replaceChildren(
+      el('p', { class: 'catatan' }, daftar.length ? `${daftar.length} bagian · ${mbTeks(total)} di perangkat ini. Simpan ke galeri/berkas, lalu hapus dari aplikasi agar memori lega.`
+        : 'Belum ada video. Tekan ● Rekam video di bawah layar.'),
+      ...baris,
+      sudah.length ? el('button', { type: 'button', class: 'garis-merah', onclick: async () => {
+        if (!confirm(`Hapus ${sudah.length} video yang sudah disimpan dari aplikasi?`)) return;
+        for (const s of sudah) await R.hapusSegmen(s.id);
+        segarkan();
+      } }, `Hapus ${sudah.length} video yang sudah disimpan (${mbTeks(sudah.reduce((n, s) => n + s.ukuran, 0))})`) : '');
+  };
+  await segarkan();
+  await dialog('Video kegiatan', kotakDaftar, [['Tutup', null, 'abu']], { fokus: false });
+}
+
 async function kirim(blob, nama) {
   const berkas = new File([blob], nama, { type: blob.type });
   if (navigator.canShare && navigator.canShare({ files: [berkas] })) {
@@ -807,6 +945,7 @@ async function dialogEkspor(l) {
     }) }, 'Simpan cadangan JSON (semua lokasi)'),
     el('button', { type: 'button', onclick: () => keluar(pulihkan) }, 'Pulihkan dari cadangan'),
     el('button', { type: 'button', onclick: () => keluar(dialogPulihFoto) }, `Pulihkan foto yang hilang${sk.hilang ? ` · ${sk.hilang} foto` : ''}`),
+    el('button', { type: 'button', onclick: () => keluar(dialogVideo) }, 'Video kegiatan (simpan / hapus)'),
   ];
   const awan = S.atur() ? `Data dan foto juga dikirim ke Google Spreadsheet${dok.sinkron_terakhir ? ` (terakhir ${jam(dok.sinkron_terakhir)})` : ''}.`
     : 'Data hanya ada di perangkat ini; sambungkan Google agar tidak hilang bila data browser terhapus.';
@@ -866,7 +1005,11 @@ async function mulai() {
   const tautan = S.dariTautan();                 // ?google=<url>&kunci=<kunci> dari "Bagikan tautan sambung"
   if (tautan) history.replaceState(null, '', location.pathname + location.hash);
   await periksaFoto();
+  R.saatPesan(toast);
+  R.saatBerubah(() => tampilRekam());
+  window.addEventListener('beforeunload', (e) => { if (R.keadaan().aktif) { e.preventDefault(); e.returnValue = ''; } });
   tampilkan();
+  R.pulihkanTerputus().then((n) => { if (n) toast(`${n} video terputus sebelumnya tetap tersimpan (Ekspor › Video kegiatan).`); }).catch(() => {});
   if (tautan) await sambungkan(tautan.url, tautan.kunci);
   else jadwalSinkron(1500);
   window.addEventListener('online', () => jadwalSinkron(1000));
