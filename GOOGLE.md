@@ -92,7 +92,7 @@ dari kamera aplikasi ini biasanya tidak masuk galeri.
 
 ## Satu folder untuk semua (ukuran, foto, video)
 
-Perlu skrip versi 8 (Kode.gs terbaru). Paling mudah: buat foldernya dulu, lalu
+Perlu skrip versi 9 (Kode.gs terbaru). Paling mudah: buat foldernya dulu, lalu
 buat spreadsheet **di dalam folder itu** (Baru › Google Spreadsheet); folder itu
 otomatis menjadi akar, tanpa perlu Pasang folder. Bila skrip sudah terpasang dari versi
 sebelumnya: tempel ulang seluruh isi [google/Kode.gs](google/Kode.gs) (KUNCI

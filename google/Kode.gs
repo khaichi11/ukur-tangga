@@ -85,7 +85,7 @@ function galat_(pesan, kode) {
 function uji_() {
   const d = bacaDokumen_();
   return { nama: SpreadsheetApp.getActive().getName(), url: SpreadsheetApp.getActive().getUrl(), folder: folder_().getId(),
-           folder_url: folder_().getUrl(), versi: 8,
+           folder_url: folder_().getUrl(), versi: 9,
            lokasi: d && Array.isArray(d.lokasi) ? d.lokasi.map(function (l) { return { id: l.id, nama: l.nama }; }) : [] };
 }
 
@@ -192,9 +192,10 @@ function tulisData_(p) {
   const lembar = tulisLembarLokasi_(dok, sebelum);
   tulisTabel_('Ringkasan', p.ringkasan || []);
   tautanRingkasan_(lembar);
+  perbaruiFoto_(p.foto || []);
+  lembarFoto_();
   urutkanLembar_(dok, lembar);
   try { SpreadsheetApp.getActive().getSheetByName('Data').hideSheet(); } catch (err) { /* sudah tersembunyi */ }
-  perbaruiFoto_(p.foto || []);
   dok.lokasi.forEach(function (l) { (l.tangga || []).forEach(function (t, i) { tulisUkuranTangga_(l, t, i + 1); }); });
   return { waktu: new Date().toISOString() };
 }
@@ -386,15 +387,19 @@ function urutkanLembar_(dok, lembar) {
 }
 
 // Kolom "Lembar" di Ringkasan: tautan ke lembar lokasinya.
+// Teks bertautan (bukan rumus HYPERLINK): rumus memakai pemisah argumen sesuai lokal spreadsheet ("," atau
+// ";"), jadi pada lokal Indonesia rumus dengan "," menjadi #ERROR!.
 function tautanRingkasan_(lembar) {
-  const sh = SpreadsheetApp.getActive().getSheetByName('Ringkasan');
-  if (!sh || sh.getLastRow() < 1) return;
-  const n = sh.getLastRow(), kolom = sh.getLastColumn() + 1, lokasi = sh.getRange(1, 1, n, 1).getValues();
+  const ss = SpreadsheetApp.getActive(), sh = ss.getSheetByName('Ringkasan');
+  if (!sh || sh.getLastRow() < 2) return;
+  const n = sh.getLastRow(), kolom = sh.getLastColumn() + 1, lokasi = sh.getRange(2, 1, n - 1, 1).getValues();
   sh.getRange(1, kolom).setValue('Lembar').setFontWeight('bold');
-  for (let r = 2; r <= n; r++) {
-    const id = lembar[String(lokasi[r - 1][0]).replace(/^'/, '')];
-    if (id !== undefined) sh.getRange(r, kolom).setFormula('=HYPERLINK("#gid=' + id + '","Buka")');
-  }
+  const isi = lokasi.map(function (r) {
+    const id = lembar[String(r[0]).replace(/^'/, '')];
+    const t = SpreadsheetApp.newRichTextValue().setText(id !== undefined ? 'Buka' : '');
+    return [id !== undefined ? t.setLinkUrl(ss.getUrl() + '#gid=' + id).build() : t.build()];
+  });
+  sh.getRange(2, kolom, n - 1, 1).setRichTextValues(isi);
 }
 
 function tulisTabel_(nama, baris) {
