@@ -710,6 +710,7 @@ async function sambungkan(url, kunci) {
   }
   dok.google_folder = j.folder;
   S.simpanAtur({ ...a, sheetUrl: j.url || '', folderUrl: j.folder_url || '' });
+  U.salinUntukLatar();
   sk.nUbah++; dok.perlu_sinkron = true; sk.galat = '';
   await simpan(); await periksaFoto(); tampilkan();
   toast(`Tersambung ke "${j.nama}"`);
@@ -916,8 +917,9 @@ async function dialogRekam() {
     info.textContent = (sisa ? `Ruang untuk aplikasi ±${mbTeks(sisa)}: cukup ±${Math.floor(sisa / 1e6 / mb)} jam. ` : '')
       + 'Video tersimpan tiap 3 detik dan dipotong per 10 menit. Layar dijaga menyala; bila layar mati atau pindah aplikasi, '
       + 'rekaman dijeda lalu lanjut sendiri saat aplikasi dibuka lagi. '
-      + (U.siap() ? `Tiap bagian otomatis diunggah ke Drive (folder ${U.atur().folderNama || 'pilihan'}).`
-        : 'Belum ada folder Drive: video hanya di HP. Atur di Ekspor › Video kegiatan.');
+      + (U.siap() ? `Tiap bagian otomatis diunggah ke Drive (folder ${U.atur().folderNama || 'spreadsheet'}) sesudah waktu tunggu `
+          + `${Number(U.atur().tunda) < 0 ? '(hanya bila ditekan Unggah sekarang)' : `${U.atur().tunda} menit`}.`
+        : 'Belum tersambung ke Google: video hanya di HP. Sambungkan lewat tombol Google di beranda.');
   };
   isian.addEventListener('change', segarkan); segarkan();
   const jawab = await dialog('Rekam video kegiatan', isian, [['Batal', null, 'abu'], ['Mulai rekam', 'ok', 'biru']], { fokus: false });
@@ -1045,6 +1047,29 @@ function layarGelap() {
 const namaVideo = R.namaVideo;
 
 let segarkanVideo = null;
+
+// Kemajuan unggah video di pojok kanan atas: persen, MB, kecepatan, sisa waktu, lama berjalan.
+let timerUnggah = null;
+function tampilUnggah() {
+  let chip = $('#unggah');
+  const k = U.kemajuan(), st = U.status();
+  if (!k && !st.galat && !st.terakhir) { chip?.remove(); clearInterval(timerUnggah); timerUnggah = null; return; }
+  if (!chip) { chip = el('button', { id: 'unggah', class: 'chip-unggah', type: 'button', onclick: () => dialogVideo() }); document.body.append(chip); }
+  if (k) {
+    const sisa = k.sisaDetik == null ? '' : ` · sisa ${k.sisaDetik >= 90 ? `±${Math.round(k.sisaDetik / 60)} mnt` : `±${Math.max(1, Math.round(k.sisaDetik))} dtk`}`;
+    chip.textContent = `↑ Unggah ${k.persen}% · ${mbTeks(k.terkirim)}/${mbTeks(k.total)}`
+      + `${k.laju > 0 ? ` · ${mbTeks(k.laju)}/dtk` : ''}${sisa} · ${durasiTeks(k.lama * 1000).replace(/^0:/, '')}`;
+    chip.classList.remove('galat');
+    if (!timerUnggah) timerUnggah = setInterval(tampilUnggah, 1000);
+  } else if (st.terakhir) {
+    chip.textContent = '✓ Video terunggah ke Drive dan diperiksa utuh';
+    chip.classList.remove('galat');
+    if (!timerUnggah) timerUnggah = setInterval(tampilUnggah, 1000);
+  } else {
+    chip.textContent = `↑ Unggah tertunda: ${st.galat}`;
+    chip.classList.add('galat');
+  }
+}
 // Folder dari tautan menjadi akar semua data di skrip: catat agar sambung ulang tidak mengunggah ulang foto.
 async function pasangFolderDrive(tautan) {
   const j = await U.pasangFolder(tautan);
@@ -1058,12 +1083,12 @@ async function pasangFolderDrive(tautan) {
 function bagianDrive(segarkan) {
   const g = S.atur(), a = U.atur(), st = U.status();
   if (!g) return el('div', { class: 'tip' }, el('span', {}, 'Agar video otomatis masuk Google Drive: sambungkan Google dulu (tombol Google di beranda).'));
-  if (!a.folder || a.gantiFolder) {
+  if (a.gantiFolder) {
     const masuk = el('input', { class: 'masuk', placeholder: 'https://drive.google.com/drive/folders/…', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', inputmode: 'url' });
     return el('div', { class: 'drive-video' },
       el('label', { class: 'kolom' }, 'Tautan folder Google Drive (ukuran, foto, dan video masuk ke sini; cukup sekali)', masuk),
       el('div', { class: 'pilihan-baris' },
-        a.folder ? el('button', { type: 'button', class: 'tombol-kecil', onclick: () => { U.simpanAtur({ ...a, gantiFolder: false }); segarkan(); } }, 'Batal') : '',
+        el('button', { type: 'button', class: 'tombol-kecil', onclick: () => { U.simpanAtur({ ...a, gantiFolder: false }); segarkan(); } }, 'Batal'),
         el('button', { type: 'button', class: 'tombol-kecil biru', onclick: async () => {
           toast('Memasang folder (memindah data lama bila ada)…');
           try {
@@ -1072,8 +1097,8 @@ function bagianDrive(segarkan) {
             segarkan();
           } catch (e) { toast('Gagal: ' + e.message); }
         } }, 'Pasang folder')),
-      el('p', { class: 'catatan' }, 'Buat folder di Drive (akun yang sama dengan skrip Google), salin tautannya, tempel di sini. '
-        + 'Di dalamnya dibuat folder per lokasi berisi ukuran.csv, Foto, dan Video per tanggal; spreadsheet dan data lama ikut dipindah ke sana.'));
+      el('p', { class: 'catatan' }, 'Tidak wajib: tanpa tautan, semua masuk folder tempat spreadsheet berada. Isi hanya bila mau folder lain '
+        + '(akun yang sama dengan skrip Google); spreadsheet dan data lama ikut dipindah ke sana.'));
   }
   const tunda = el('select', { class: 'masuk pendek', onchange: (e) => { U.simpanAtur({ ...U.atur(), tunda: Number(e.target.value) }); U.jadwal(500); segarkan(); } },
     [[0, 'langsung'], [10, '10 menit'], [30, '30 menit'], [60, '1 jam'], [-1, 'hanya bila saya tekan Unggah']].map(([v, t]) =>
@@ -1081,13 +1106,18 @@ function bagianDrive(segarkan) {
   const centang = (kunci, teks) => el('label', { class: 'centang' }, el('input', { type: 'checkbox', ...(a[kunci] ? { checked: '' } : {}),
     onchange: (e) => { U.simpanAtur({ ...U.atur(), [kunci]: e.target.checked }); U.jadwal(500); } }), el('span', {}, teks));
   return el('div', { class: 'drive-video' },
-    el('div', { class: 'pilihan-baris' }, el('span', { class: 'nama-folder' }, `Folder Drive: ${a.folderNama || 'terpasang'}`),
-      a.folderUrl ? el('a', { href: a.folderUrl, target: '_blank', rel: 'noopener', class: 'tombol-kecil' }, 'Buka') : '',
+    el('div', { class: 'pilihan-baris' }, el('span', { class: 'nama-folder' }, `Folder Drive: ${a.folderNama || (a.folder ? 'terpasang' : 'folder spreadsheet')}`),
+      (a.folderUrl || g.folderUrl) ? el('a', { href: a.folderUrl || g.folderUrl, target: '_blank', rel: 'noopener', class: 'tombol-kecil' }, 'Buka') : '',
       el('button', { type: 'button', class: 'tombol-kecil', onclick: () => { U.simpanAtur({ ...a, gantiFolder: true }); segarkan(); } }, 'Ganti')),
     centang('hapusLokal', 'Hapus dari HP sesudah terunggah (memori lega)'),
     centang('hanyaWifi', 'Unggah hanya lewat Wi-Fi'),
+    'Notification' in window && Notification.permission !== 'granted' ? el('button', { type: 'button', class: 'tombol-kecil', onclick: async () => {
+      const r = await U.izinNotifikasi(); toast(r === 'granted' ? 'Notifikasi unggah aktif' : 'Notifikasi tidak diizinkan'); segarkan();
+    } }, 'Izinkan notifikasi unggah (saat layar mati)') : '',
     el('label', { class: 'kolom' }, 'Tunggu sebelum unggah (waktu untuk memutar dan menghapus video yang salah)', tunda),
-    st.galat ? el('p', { class: 'catatan' }, `Unggah tertunda: ${st.galat}.`) : '');
+    st.galat ? el('p', { class: 'catatan' }, `Unggah tertunda: ${st.galat}.`) : '',
+    el('p', { class: 'catatan' }, 'Selama mengunggah layar dijaga menyala (boleh Gelap). Bila layar dimatikan atau pindah aplikasi, '
+      + 'unggah dilanjutkan di latar beberapa menit dengan notifikasi; sisanya lanjut dari posisi terakhir saat aplikasi dibuka lagi.'));
 }
 
 // Unduh langsung (bukan menu bagikan): Android menaruhnya di folder Download, yang tampil di galeri.
@@ -1135,7 +1165,7 @@ async function dialogVideo(saring = null) {
       const menunggu = tunda === Infinity ? ' · menunggu Unggah' : tunda > 0 ? ` · diunggah dalam ${durasiTeks(tunda).replace(/^0:/, '')}` : '';
       const keadaanTeks = (s.status === 'merekam' ? ' · sedang direkam' : s.status === 'terputus' ? ' · terputus (tersimpan sampai potongan terakhir)' : '')
         + (s.terverifikasi ? ' · di Drive ✓ (diperiksa utuh)' : s.drive_id ? ' · terunggah, menunggu pemeriksaan'
-          : st.proses.has(s.id) ? ` · mengunggah ${st.proses.get(s.id)}%` : '')
+          : st.proses.has(s.id) ? ` · mengunggah ${Math.floor(100 * st.proses.get(s.id).terkirim / st.proses.get(s.id).total)}%` : '')
         + (s.verif_galat && !s.terverifikasi ? ` · ${s.verif_galat}${s.unggah_ulang > 3 ? ' (berhenti mencoba; video tetap di HP)' : ', diunggah ulang'}` : '')
         + (s.lokal === false ? ' · sudah dihapus dari HP' : '') + (U.siap() ? menunggu : '');
       return el('div', { class: 'baris-video' },
@@ -1295,7 +1325,7 @@ async function mulai() {
   R.saatPesan(toast);
   R.saatBerubah(() => tampilRekam());
   R.saatBagianSelesai(() => { U.jadwal(1500); segarkanTombolVideo(); });
-  U.saatBerubah(() => { if (segarkanVideo && $('#dialog').open) segarkanVideo(); });
+  U.saatBerubah(() => { tampilUnggah(); if (segarkanVideo && $('#dialog').open) segarkanVideo(); });
   U.jadwal(6000);
   window.addEventListener('beforeunload', (e) => { if (R.keadaan().aktif) { e.preventDefault(); e.returnValue = ''; } });
   tampilkan();

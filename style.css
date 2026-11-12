@@ -195,3 +195,8 @@ video.pratinjau-lensa { width: 100%; max-height: 40vh; background: #000000; bord
 .kepala-tangga .video-tangga { margin-left: 8px; min-height: 30px; padding: 0 10px; border-radius: 15px; border: 1px solid var(--garis);
   color: var(--biru); font-size: .85rem; font-weight: 600; white-space: nowrap; }
 .kepala-tangga { flex-wrap: wrap; }
+.chip-unggah { position: fixed; top: calc(60px + env(safe-area-inset-top, 0px)); right: 8px; z-index: 26; max-width: calc(100vw - 16px);
+  min-height: 32px; padding: 0 10px; border-radius: 16px; background: var(--biru-tua); color: #FFFFFF; font-size: .8rem; font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.chip-unggah.galat { background: #92400E; }
+@media print { .chip-unggah { display: none !important; } }

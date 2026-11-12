@@ -128,6 +128,15 @@ lolos, video tetap di HP. Penghapusan otomatis bisa dimatikan, dan ada pilihan
 per jam pada mutu Sedang). **Hapus** di aplikasi hanya menghapus dari HP/daftar;
 berkas di Drive dihapus manual oleh Anda.
 
+**Kemajuan dan layar mati.** Selama mengunggah, pojok kanan atas menunjukkan persen,
+MB, kecepatan, sisa waktu, dan lama berjalan, lalu *✓ terunggah*; layar dijaga menyala
+(boleh **Gelap**). Bila layar dimatikan atau pindah aplikasi, unggah diserahkan ke
+service worker (Background Sync) yang melanjutkannya di latar beberapa menit, dengan
+notifikasi kemajuan bila **Izinkan notifikasi unggah** (Video kegiatan) sudah ditekan.
+Browser tidak mengizinkan unggah latar tanpa batas: sisanya dilanjutkan dari posisi
+terakhir saat aplikasi dibuka lagi. HP dimatikan total menghentikan semuanya sampai
+dinyalakan dan aplikasi dibuka.
+
 **Kirim sekarang** (tombol Google) mengirim apa yang sudah ada, sedikit demi
 sedikit: ukuran dulu, lalu foto satu per satu (satu foto gagal tidak
 menghentikan yang lain), lalu video yang sudah lewat waktu tunggu.

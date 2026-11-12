@@ -63,12 +63,7 @@ const kunci = (id, i) => `${id}:${String(i).padStart(6, '0')}`;
 const rentang = (id) => IDBKeyRange.bound(`${id}:`, `${id}:￿`);
 export const simpanSegmen = (s) => tx(['segmen'], 'readwrite', (t) => { t.objectStore('segmen').put({ ...s }); });
 
-export function namaVideo(s) {
-  const d = new Date(s.mulai), p = (x) => String(x).padStart(2, '0');
-  const ext = s.mime.includes('mp4') ? 'mp4' : 'webm';
-  const dasar = (s.lokasi?.nama || 'kegiatan').replace(/[^\p{L}\p{N}]+/gu, '_').replace(/^_|_$/g, '') || 'kegiatan';
-  return `video_${dasar}${s.tangga ? `_tangga${s.tangga.nomor}` : ''}_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.${ext}`;
-}
+export const namaVideo = (s) => self.IntiUnggah.namaVideo(s);
 
 // Sesudah Drive menerima berkas: catat tautannya. Salinan di HP TIDAK dihapus di sini.
 export async function tandaiTerunggah(s, info) {
@@ -89,45 +84,11 @@ export async function tandaiTerverifikasi(s, hapusLokal) {
   } else await simpanSegmen(s);
 }
 
-export async function daftar() {
-  const semua = await tx(['segmen'], 'readonly', (t) => t.objectStore('segmen').getAll());
-  return (semua || []).sort((a, b) => (a.mulai < b.mulai ? 1 : -1));
-}
-export async function blobSegmen(s) {
-  const bagian = (await tx(['potongan'], 'readonly', (t) => t.objectStore('potongan').getAll(rentang(s.id)))) || [];
-  const lama = Date.parse(s.selesai || s.diperbarui) - Date.parse(s.mulai);
-  if (bagian.length && s.mime.includes('webm') && lama > 0) {
-    try { bagian[0] = await isiDurasiWebm(bagian[0], lama); } catch (_) { /* tetap bisa diputar tanpa durasi */ }
-  }
-  return new Blob(bagian, { type: s.mime.split(';')[0] });
-}
+// Rekaman berawalan "__" (pengaturan untuk service worker) bukan video.
+export const daftar = () => self.IntiUnggah.daftar();
+// Sama persis dengan yang diunggah (inti_unggah.js): potongan + durasi WebM.
+export const blobSegmen = (s) => self.IntiUnggah.blobSegmen(s);
 
-// WebM dari MediaRecorder tidak memuat durasi, sehingga galeri HP tidak bisa menggeser (seek). Tambahkan
-// elemen Duration (milidetik, skala waktu bawaan 1 ms) ke Segment > Info pada potongan pertama.
-async function isiDurasiWebm(blob, ms) {
-  const u = new Uint8Array(await blob.arrayBuffer());
-  const panjangVint = (b) => { for (let i = 0; i < 8; i++) if (b & (0x80 >> i)) return i + 1; return 0; };
-  const bacaVint = (i) => {
-    const n = panjangVint(u[i]); let v = u[i] & (0xff >> n);
-    for (let k = 1; k < n; k++) v = v * 256 + u[i + k];
-    return { n, v };
-  };
-  let info = -1;
-  for (let i = 0; i < Math.min(u.length - 4, 4096); i++) {
-    if (u[i] === 0x15 && u[i + 1] === 0x49 && u[i + 2] === 0xA9 && u[i + 3] === 0x66) { info = i; break; }
-  }
-  if (info < 0) return blob;
-  const ukuran = bacaVint(info + 4), awalIsi = info + 4 + ukuran.n, akhirIsi = awalIsi + ukuran.v;
-  const isi = u.subarray(awalIsi, akhirIsi);
-  for (let i = 0; i + 1 < isi.length; i++) if (isi[i] === 0x44 && isi[i + 1] === 0x89) return blob;   // sudah ada
-  const dur = new Uint8Array(11);
-  dur.set([0x44, 0x89, 0x88]);
-  new DataView(dur.buffer).setFloat64(3, ms);
-  const isiBaru = isi.length + dur.length, ukuranBaru = new Uint8Array(8);
-  ukuranBaru[0] = 0x01;
-  for (let k = 7, v = isiBaru; k >= 1; k--, v = Math.floor(v / 256)) ukuranBaru[k] = v % 256;
-  return new Blob([u.subarray(0, info + 4), ukuranBaru, isi, dur, u.subarray(akhirIsi)], { type: blob.type });
-}
 export async function tandaiDisimpan(s) { s.disimpan = new Date().toISOString(); await simpanSegmen(s); }
 export async function hapusSegmen(id) {
   await tx(['segmen', 'potongan'], 'readwrite', (t) => {
@@ -205,6 +166,15 @@ function syarat(arah, w, h, perangkat = '') {
 // Chrome di Android menampilkan tiap lensa sebagai perangkat sendiri bila HP mengizinkan, mis.
 // "camera2 0, facing back", "camera2 2, facing back". Nama lensa (utama/lebar/makro) tidak diberikan, jadi
 // ditebak dari resolusi maksimum (makro biasanya <= 2 MP, utama terbesar) dan dipastikan lewat pratinjau.
+// Di Android, kamera Camera2 dengan id 0 hampir selalu kamera belakang utama ("camera2 0, facing back").
+const idKamera = (label) => { const m = /camera\s*2?\s*(\d+)/i.exec(label || ''); return m ? Number(m[1]) : null; };
+export async function kameraUtamaBelakang() {
+  try {
+    const d = (await navigator.mediaDevices.enumerateDevices()).filter((x) => x.kind === 'videoinput' && x.label);
+    const b = d.filter((x) => arahDari(x.label) === 'belakang');
+    return (b.find((x) => idKamera(x.label) === 0) || b.sort((x, y) => (idKamera(x.label) ?? 99) - (idKamera(y.label) ?? 99))[0])?.deviceId || '';
+  } catch (_) { return ''; }
+}
 const arahDari = (label) => (/front|depan|user|selfie/i.test(label) ? 'depan' : /back|belakang|rear|environment/i.test(label) ? 'belakang' : '');
 export async function daftarKamera(rinci = false) {
   let d = (await navigator.mediaDevices.enumerateDevices()).filter((x) => x.kind === 'videoinput');
@@ -224,12 +194,16 @@ export async function daftarKamera(rinci = false) {
         hentikanAliran(s);
       } catch (_) { k.gagal = true; }
     }
-    const belakang = hasil.filter((k) => k.arah !== 'depan' && k.lebarMaks).sort((a, b) => b.lebarMaks - a.lebarMaks);
-    if (belakang.length > 1 && belakang[0].lebarMaks > belakang[belakang.length - 1].lebarMaks) {   // tebak hanya bila resolusinya berbeda
-      belakang[0].tebakan = 'utama';
+    // Utama: id Camera2 0 bila ada (patokan Android); kalau tidak, resolusi terbesar. Makro: resolusi terkecil
+    // (<= 2,6 MP lebar). Sisanya kemungkinan wide. Chrome sering membatasi resolusi yang dilaporkan, jadi ini
+    // hanya tebakan: pastikan dengan pratinjau.
+    const belakang = hasil.filter((k) => k.arah !== 'depan' && !k.gagal).sort((a, b) => (b.lebarMaks || 0) - (a.lebarMaks || 0));
+    if (belakang.length > 1) {
+      const utama = belakang.find((k) => idKamera(k.label) === 0) || (belakang[0].lebarMaks > (belakang[belakang.length - 1].lebarMaks || 0) ? belakang[0] : null);
+      if (utama) utama.tebakan = 'utama';
       const kecil = belakang[belakang.length - 1];
-      if (kecil.lebarMaks <= 2600) kecil.tebakan = 'makro';
-      belakang.filter((k) => !k.tebakan).forEach((k) => { k.tebakan = 'lebar/wide'; });
+      if (kecil !== utama && kecil.lebarMaks && kecil.lebarMaks <= 2600) kecil.tebakan = 'makro';
+      if (utama) belakang.filter((k) => !k.tebakan).forEach((k) => { k.tebakan = 'wide'; });
     }
   }
   let nb = 0, nd = 0;
@@ -241,7 +215,9 @@ async function nyalakan() {
   const m = MUTU[st.opsi.mutu];
   const utama = st.opsi.utama || (st.opsi.mode === 'depan' ? 'user' : 'environment');
   st.arah = utama;
-  const pilihan = st.opsi.kamera || '';                // deviceId kamera utama pilihan pengguna (mis. lensa wide)
+  // deviceId kamera pilihan pengguna (mis. lensa wide); Otomatis = kamera belakang utama (Camera2 id 0), bukan
+  // sembarang kamera belakang yang dipilih Chrome lewat facingMode.
+  const pilihan = st.opsi.kamera || (utama === 'environment' ? await kameraUtamaBelakang() : '');
   const suara = st.opsi.suara ? { echoCancellation: true, noiseSuppression: true } : false;
   let a;
   try {
