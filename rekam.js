@@ -121,13 +121,15 @@ export function saatBagianSelesai(f) { bagianSelesai = f; }
 export function saatBerubah(f) { pendengar = f; }
 export function saatPesan(f) { pesan = f; }
 const beritahu = () => { try { pendengar(keadaan()); } catch (_) { /* UI tidak boleh mengganggu perekam */ } };
+// Mode utuh: satu berkas untuk seluruh rekaman; pindah lokasi/tangga dicatat sebagai penanda waktu.
+const labelKini = () => (st.seg?.penanda?.length ? st.seg.penanda[st.seg.penanda.length - 1] : st.seg);
 const modeNyata = () => (st.video.length > 1 ? 'dua' : st.arah === 'user' ? 'depan' : 'belakang');
 export const kanvas = () => st.kanvas;
 export function keadaan() {
   return {
     aktif: st.aktif, jeda: st.jeda, mulai: st.mulaiTotal, ukuran: st.ukuranTotal, sisa: st.sisa,
-    mode: modeNyata(), lokasi: st.seg?.lokasi?.nama || '', tangga: st.seg?.tangga?.nomor || null, catatan: st.catatan,
-    mutu: st.opsi?.mutu,
+    mode: modeNyata(), lokasi: labelKini()?.lokasi?.nama || '', tangga: labelKini()?.tangga?.nomor || null, catatan: st.catatan,
+    mutu: st.opsi?.mutu, utuh: !!st.opsi?.utuh, penanda: st.seg?.penanda?.length || 0,
   };
 }
 
@@ -301,7 +303,8 @@ function gambar() {
     c.drawImage(v1, x, y, w, h);
   }
   const huruf = Math.max(13, Math.round(Math.min(W, H) / 26));
-  const teks = `${st.seg?.lokasi?.nama ? st.seg.lokasi.nama + ' · ' : ''}${st.seg?.tangga ? `Tangga ${st.seg.tangga.nomor} · ` : ''}${new Date().toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'medium' })}`;
+  const lb = labelKini();
+  const teks = `${lb?.lokasi?.nama ? lb.lokasi.nama + ' · ' : ''}${lb?.tangga ? `Tangga ${lb.tangga.nomor} · ` : ''}${new Date().toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'medium' })}`;
   c.font = `600 ${huruf}px system-ui, sans-serif`;
   const lebarTeks = c.measureText(teks).width;
   c.fillStyle = 'rgba(0,0,0,.55)'; c.fillRect(6, H - huruf - 14, lebarTeks + 12, huruf + 10);
@@ -321,6 +324,10 @@ async function segmenBaru() {
     selesai: null, lokasi: lok ? { id: lok.id, nama: lok.nama } : null, tangga: tgg ? { id: tgg.id, nomor: tgg.nomor } : null, mode: modeNyata(),
     mutu: st.opsi.mutu, mime: r.mimeType || mime || 'video/webm', ukuran: 0, n: 0, status: 'merekam', catatan: st.catatan,
   };
+  if (st.opsi.utuh) {
+    seg.utuh = true;
+    seg.penanda = [{ t: 0, lokasi: seg.lokasi, tangga: seg.tangga }];
+  }
   await simpanSegmen(seg);
   st.seg = seg; st.idx = 0; st.rekamer = r;
   r.ondataavailable = (e) => {
@@ -348,7 +355,7 @@ async function segmenBaru() {
   r.onerror = () => { if (st.aktif) mulaiUlang(); };
   r.start(POTONG_MS);
   clearTimeout(st.timerBagian);
-  st.timerBagian = setTimeout(() => gantiBagian().catch(() => {}), BAGIAN_MS);
+  if (!st.opsi.utuh) st.timerBagian = setTimeout(() => gantiBagian().catch(() => {}), BAGIAN_MS);
   beritahu();
 }
 
@@ -473,11 +480,18 @@ export async function berhenti() {
 }
 
 // Pindah lokasi atau tangga saat merekam: mulai bagian baru agar setiap berkas berlabel satu lokasi + tangga.
+// Mode utuh: video tidak dipotong; perpindahan dicatat sebagai penanda (detik ke-n: lokasi, tangga).
 export function lokasiBerubah() {
   if (!st.aktif || st.jeda || !st.seg) return;
   const l = st.opsi.lokasi ? st.opsi.lokasi() : null, t = l && st.opsi.tangga ? st.opsi.tangga() : null;
-  if ((l?.id || null) !== (st.seg.lokasi?.id || null) || (t?.id || null) !== (st.seg.tangga?.id || null)
-      || (t?.nomor || null) !== (st.seg.tangga?.nomor || null)) gantiBagian().catch(() => {});
+  const kini = labelKini();
+  if ((l?.id || null) === (kini.lokasi?.id || null) && (t?.id || null) === (kini.tangga?.id || null)
+      && (t?.nomor || null) === (kini.tangga?.nomor || null)) return;
+  if (!st.seg.utuh) { gantiBagian().catch(() => {}); return; }
+  const seg = st.seg;
+  seg.penanda.push({ t: Date.now() - Date.parse(seg.mulai), lokasi: l ? { id: l.id, nama: l.nama } : null, tangga: t ? { id: t.id, nomor: t.nomor } : null });
+  st.rantai = st.rantai.then(() => simpanSegmen(seg)).catch(() => {});
+  beritahu();
 }
 
 // Diurutkan: sembunyi lalu tampil lagi dengan cepat tidak boleh menyalakan kamera sebelum yang lama mati.
@@ -497,7 +511,8 @@ async function gantiLayar() {
     st.jeda = false;
     try {
       await nyalakan(); await kunciLayar();
-      pesan('Rekaman dilanjutkan (bagian baru).');
+      pesan(st.opsi.utuh ? 'Rekaman dilanjutkan. Browser menghentikan kamera saat layar mati, jadi ini berkas baru.'
+        : 'Rekaman dilanjutkan (bagian baru).');
     } catch (e) { pesan('Gagal melanjutkan rekaman: ' + e.message); await berhenti(); }
     beritahu();
   }

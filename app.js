@@ -888,6 +888,7 @@ function segarkanTombolTangga() {
   }
 }
 
+const APK_REKAM = 'https://github.com/khaichi11/ukur-tangga/releases/latest/download/rekam-ukur-tangga.apk';
 async function dialogRekam() {
   const simpanan = JSON.parse(localStorage.getItem('ukur-tangga:rekam') || '{}');
   const radio = (nama, nilai, pilihan) => el('div', { class: 'pilih-rekam' }, pilihan.map(([v, teks]) =>
@@ -903,19 +904,30 @@ async function dialogRekam() {
     l && l.tangga.length > 1 ? el('h3', {}, 'Tangga') : '',
     l && l.tangga.length > 1 ? radio('tangga', tanggaUntukRekam()?.id, l.tangga.map((t, i) => [t.id, `Tangga ${i + 1} · ${t.anak.length} anak tangga`])) : '',
     el('h3', {}, 'Kamera'),
+    /Android/i.test(navigator.userAgent) ? el('p', { class: 'catatan' }, 'Chrome di Android umumnya tidak bisa menyalakan dua kamera sekaligus. ',
+      el('a', { href: 'intent://rekam#Intent;scheme=ukurtangga;package=id.ukurtangga.rekam;S.browser_fallback_url='
+        + encodeURIComponent(APK_REKAM) + ';end' }, 'Buka perekam dua kamera (aplikasi Android)'),
+      ': kamera depan + belakang dalam satu video utuh, tetap merekam saat layar mati atau saat kembali ke sini. Belum terpasang? Tautan itu mengunduh APK-nya.') : '',
     radio('mode', simpanan.mode || 'dua', [['dua', 'Belakang + depan kecil di pojok (bila HP bisa)'], ['belakang', 'Belakang saja'], ['depan', 'Depan saja']]),
     pilihLensa,
     el('h3', {}, 'Mutu'),
     radio('mutu', simpanan.mutu || 'sedang', Object.entries(R.MUTU).map(([k, m]) =>
       [k, `${m.label}: ${m.lebar} px, ${m.fps} fps, ±${R.mbPerJam(k, true)} MB/jam`])),
     el('label', { class: 'centang' }, el('input', { type: 'checkbox', name: 'suara', ...(simpanan.suara !== false ? { checked: '' } : {}) }), el('span', {}, 'Rekam suara')),
+    el('h3', {}, 'Berkas video'),
+    radio('berkas', simpanan.utuh ? 'utuh' : 'pisah', [['pisah', 'Dipisah per lokasi/tangga dan per 10 menit (seperti biasa)'],
+      ['utuh', 'Satu video utuh: tidak dipotong walau pindah lokasi/tangga; perpindahan dicatat sebagai penanda waktu']]),
     info);
   const nilai = () => ({ mode: isian.querySelector('[name=mode]:checked').value, mutu: isian.querySelector('[name=mutu]:checked').value,
-    suara: isian.querySelector('[name=suara]').checked });
+    suara: isian.querySelector('[name=suara]').checked, utuh: isian.querySelector('[name=berkas]:checked').value === 'utuh' });
   const segarkan = () => {
     const v = nilai(), mb = R.mbPerJam(v.mutu, v.suara);
     info.textContent = (sisa ? `Ruang untuk aplikasi ±${mbTeks(sisa)}: cukup ±${Math.floor(sisa / 1e6 / mb)} jam. ` : '')
-      + 'Video tersimpan tiap 3 detik dan dipotong per 10 menit. Layar dijaga menyala; bila layar mati atau pindah aplikasi, '
+      + (v.utuh ? 'Video tersimpan tiap 3 detik dalam satu berkas sampai ■ ditekan; nama lokasi/tangga ikut tergambar di video dan '
+          + 'daftar penandanya ada di keterangan berkas. Hanya layar mati/pindah aplikasi yang memulai berkas baru (browser mematikan kamera). '
+          + 'Berkas panjang = unggah lebih lama dan butuh ruang lebih banyak sekaligus. '
+        : 'Video tersimpan tiap 3 detik dan dipotong per 10 menit. ')
+      + 'Layar dijaga menyala; bila layar mati atau pindah aplikasi, '
       + 'rekaman dijeda lalu lanjut sendiri saat aplikasi dibuka lagi. '
       + (U.siap() ? `Tiap bagian otomatis diunggah ke Drive (folder ${U.atur().folderNama || 'spreadsheet'}) sesudah waktu tunggu `
           + `${Number(U.atur().tunda) < 0 ? '(hanya bila ditekan Unggah sekarang)' : `${U.atur().tunda} menit`}.`
@@ -1030,7 +1042,7 @@ async function infoRekam() {
   const kamera = k.mode === 'dua' ? 'belakang + depan' : k.mode === 'depan' ? 'depan' : 'belakang';
   await dialog('Sedang merekam', [
     el('p', {}, `${durasiTeks(Date.now() - k.mulai)} · ${mbTeks(k.ukuran)} · kamera ${kamera} · mutu ${R.MUTU[k.mutu].label}`),
-    el('p', { class: 'catatan' }, `${k.lokasi ? `Bagian ini berlabel ${k.lokasi}${k.tangga ? `, tangga ${k.tangga}` : ''}. Pindah tangga: tekan Rekam di sini pada kartu tangganya. ` : ''}${k.catatan}${k.sisa ? ` Sisa ruang ±${mbTeks(k.sisa)}.` : ''}`),
+    el('p', { class: 'catatan' }, `${k.utuh ? `Satu video utuh (${k.penanda} penanda lokasi/tangga). ` : ''}${k.lokasi ? `${k.utuh ? 'Sekarang' : 'Bagian ini berlabel'} ${k.lokasi}${k.tangga ? `, tangga ${k.tangga}` : ''}. Pindah tangga: tekan Rekam di sini pada kartu tangganya. ` : ''}${k.catatan}${k.sisa ? ` Sisa ruang ±${mbTeks(k.sisa)}.` : ''}`),
   ], [['Tutup', null, 'abu']]);
 }
 
@@ -1170,7 +1182,8 @@ async function dialogVideo(saring = null) {
         + (s.lokal === false ? ' · sudah dihapus dari HP' : '') + (U.siap() ? menunggu : '');
       return el('div', { class: 'baris-video' },
         el('div', { class: 'ket' }, el('div', { class: 'nama' }, `${s.lokasi?.nama || 'Tanpa lokasi'}${s.tangga ? ` · Tangga ${s.tangga.nomor}` : ''}`),
-          el('div', { class: 'sub' }, `${jam(s.mulai)} · ${durasiTeks(lama)} · ${mbTeks(s.ukuran)}${keadaanTeks}${s.disimpan ? ' · sudah disimpan' : ''}`)),
+          el('div', { class: 'sub' }, `${jam(s.mulai)} · ${durasiTeks(lama)} · ${mbTeks(s.ukuran)}${keadaanTeks}${s.disimpan ? ' · sudah disimpan' : ''}`),
+          s.penanda?.length > 1 ? el('div', { class: 'sub' }, `Video utuh · ${self.IntiUnggah.teksPenanda(s)}`) : ''),
         s.lokal !== false && s.status !== 'merekam' ? el('button', { type: 'button', class: 'tombol-kecil', onclick: () => putarVideo(s, saring) }, 'Putar') : '',
         U.siap() && tunda > 0 ? el('button', { type: 'button', class: 'tombol-kecil', onclick: async () => { await U.unggahSekarang(s); segarkan(); } }, 'Unggah sekarang') : '',
         s.lokal === false ? (s.drive_link ? el('a', { href: s.drive_link, target: '_blank', rel: 'noopener', class: 'tombol-kecil' }, 'Buka') : '')
