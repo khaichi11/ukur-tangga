@@ -11,8 +11,8 @@ android {
         applicationId = "id.ukurtangga.rekam"
         minSdk = 29          // simpan ke Movies/ lewat MediaStore tanpa izin penyimpanan
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
     }
 
     // Kunci tetap di repo (bukan rahasia; hanya untuk instal langsung dari browser) agar versi baru bisa

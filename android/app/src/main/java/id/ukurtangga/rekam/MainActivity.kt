@@ -54,10 +54,12 @@ class MainActivity : ComponentActivity() {
             text = "Buka Ukur Tangga"
             setOnClickListener { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(URL_APLIKASI))) }
         }
+        val tes = Button(this).apply { text = "Tes dua kamera"; setOnClickListener { tesKamera() } }
         val bawah = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.argb(170, 0, 0, 0))
             addView(teksStatus)
+            addView(tes, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
             addView(LinearLayout(this@MainActivity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 addView(tombol, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
@@ -87,10 +89,32 @@ class MainActivity : ComponentActivity() {
     private fun tekanTombol() {
         val s = RekamService.aktif
         if (s != null) { RekamService.berhenti(this); return }
+        hasilTes = null
         val perlu = mutableListOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
         if (Build.VERSION.SDK_INT >= 33) perlu += Manifest.permission.POST_NOTIFICATIONS
         if (perlu.all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }) RekamService.mulai(this)
         else mintaIzin.launch(perlu.toTypedArray())
+    }
+
+    private var hasilTes: String? = null
+
+    private fun tesKamera() {
+        if (RekamService.aktif != null) { teksStatus.text = "Hentikan rekaman dulu, lalu tekan Tes dua kamera."; return }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            mintaIzinTes.launch(Manifest.permission.CAMERA); return
+        }
+        hasilTes = "Menguji… (±5 detik)"
+        segarkan()
+        TesKamera(this) { hasil -> runOnUiThread {
+            hasilTes = hasil
+            segarkan()
+            startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain")
+                .putExtra(Intent.EXTRA_TEXT, hasil), "Kirim hasil tes"))
+        } }.jalankan()
+    }
+
+    private val mintaIzinTes = registerForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        if (ok) tesKamera() else teksStatus.text = "Izin kamera ditolak."
     }
 
     private var pratinjauTerpasang: RekamService? = null
@@ -107,6 +131,7 @@ class MainActivity : ComponentActivity() {
             val d = (System.currentTimeMillis() - s.mulaiMs) / 1000
             String.format("%d:%02d:%02d · ", d / 3600, d / 60 % 60, d % 60)
         } else ""
+        if (s == null && hasilTes != null) { teksStatus.text = hasilTes; return }
         teksStatus.text = waktu + RekamService.status +
             if (s?.merekam == true) "\nBoleh pindah ke Ukur Tangga atau matikan layar; rekaman jalan terus sampai Berhenti." else ""
     }
